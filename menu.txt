@@ -1,0 +1,10 @@
+// 项目目录
+RealEstateAI/
+├── scrapers/          # 爬虫
+├── data_pipeline/     # 数据处理
+├── models/            # 机器学习
+├── nlp_module/        # NLP文本提取
+├── api/               # FastAPI后端
+├── dashboard/         # 可视化看板
+├── data/              # 存放SQLite数据库和CSV文件
+└── utils/             # 工具函数

@@ -1,0 +1,27 @@
+# 基础
+pandas==2.0.3
+numpy==1.24.3
+sqlalchemy==2.0.19
+
+# 爬虫
+requests==2.31.0
+beautifulsoup4==4.12.2
+lxml==4.9.3
+
+# 机器学习（ARM64 适配版）
+scikit-learn==1.3.0
+xgboost==1.7.6
+lightgbm==4.5.0
+
+# NLP
+transformers==4.31.0
+sentence-transformers==2.2.2
+
+# 可视化与API
+plotly==5.15.0
+dash==2.14.0
+fastapi==0.100.0
+uvicorn[standard]==0.23.2
+
+# 工具（无Docker依赖）
+python-dotenv==1.0.0
