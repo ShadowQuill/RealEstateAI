@@ -45,6 +45,7 @@ def train():
     blend_model.fit(blend_X, y_test)
     blend_pred = blend_model.predict(blend_X)
 
+    # 定义评估函数
     def evaluate(name, preds):
         print(f"📊 {name}:")
         print(f"  RMSE: {np.sqrt(mean_squared_error(y_test, preds)):.2f}")

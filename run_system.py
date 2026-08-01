@@ -1,11 +1,18 @@
 # run_system.py
+import os
+from dotenv import load_dotenv
+
+# 加载项目根目录的 .env 配置文件
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+
 import subprocess
 import time
 import multiprocessing
 import requests
 import sys
 
-API_URL = "http://127.0.0.1:8000"
+API_URL = os.environ.get('API_BASE_URL', 'http://127.0.0.1:8000')
+DASHBOARD_PORT = os.environ.get('DASHBOARD_PORT', '8050')
 HEALTH_CHECK_ENDPOINT = "/health"
 MAX_RETRIES = 40
 RETRY_INTERVAL = 1
@@ -58,10 +65,10 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # 🔽 新增：后端成功启动后打印访问地址
-    print("✅ 后端已启动，访问 http://127.0.0.1:8000/docs 查看接口文档")
+    print(f"✅ 后端已启动，访问 {API_URL}/docs 查看接口文档")
 
     dash_proc = start_dashboard()
-    print("✅ 看板已启动，访问 http://127.0.0.1:8050")
+    print(f"✅ 看板已启动，访问 http://127.0.0.1:{DASHBOARD_PORT}")
 
     try:
         api_proc.wait()

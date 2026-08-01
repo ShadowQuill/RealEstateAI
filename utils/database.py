@@ -26,13 +26,14 @@ class House(Base):
     __tablename__ = "houses"
     id = Column(Integer, primary_key=True, index=True)
     city = Column(String, index=True)
+    year = Column(Integer, index=True)          # 交易年份
     title = Column(String)
-    price = Column(Float)
-    unit_price = Column(Float)
+    price = Column(Float)                       # 交易时总价（万元）
+    unit_price = Column(Float)                  # 交易时单价（元/平米）
     area = Column(Float)
     layout = Column(String)
     floor_info = Column(String)
-    building_year = Column(Integer)
+    building_year = Column(Integer)             # 房屋建成年份
     url = Column(String, unique=True)
     created_at = Column(DateTime, default=datetime.datetime.now)
 

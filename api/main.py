@@ -1,16 +1,20 @@
 # api/main.py
+import sys
+import os
+
+# 加载项目根目录的 .env 配置文件
+from dotenv import load_dotenv
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(BASE_DIR, '.env'))
+
+sys.path.append(BASE_DIR)
 from nlp_module.ai_analyzer import AIRealEstateAnalyzer
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, model_validator
 import joblib
 import numpy as np
 import pandas as pd
-import sys
-import os
-from datetime import datetime  # 新增，用于获取当前年份
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from datetime import datetime
 
 app = FastAPI(
     title="🏡 中国城市房地产AI分析平台",
@@ -33,51 +37,48 @@ scaler = joblib.load(os.path.join(BASE_DIR, 'models/scaler.pkl'))
 feature_cols = joblib.load(os.path.join(BASE_DIR, 'models/feature_cols.pkl'))
 
 
+# api/main.py 中修改 HouseInput 和校验器
 class HouseInput(BaseModel):
-    # 基础字段（带默认值，但校验会强制必须填写有效数据）
-    area: float = Field(0.0, description="房屋建筑面积（单位：平方米）")
-    building_year: int = Field(2000, description="房屋建成年份（如 2015）")
+    year: int = Field(2026, description="交易年份（支持未来5年）")
+    area: float = Field(80.0, description="面积")
+    building_year: int = Field(2010, description="建成年份")
+    city_北京: int = Field(0)
+    city_上海: int = Field(0)
+    city_广州: int = Field(0)
+    city_深圳: int = Field(0)
+    layout_2室1厅: int = Field(0)
+    layout_3室1厅: int = Field(0)
+    layout_3室2厅: int = Field(0)
+    floor_info_低楼层: int = Field(0)
+    floor_info_中楼层: int = Field(0)
+    floor_info_高楼层: int = Field(0)
 
-    # 户型独热编码字段
-    layout_2室1厅: int = Field(0, description="是否2室1厅（是为1，否为0）")
-    layout_3室1厅: int = Field(0, description="是否3室1厅（是为1，否为0）")
-    layout_3室2厅: int = Field(0, description="是否3室2厅（是为1，否为0）")
-
-    # 楼层独热编码字段
-    floor_info_低楼层: int = Field(0, description="是否低楼层（是为1，否为0）")
-    floor_info_中楼层: int = Field(0, description="是否中楼层（是为1，否为0）")
-    floor_info_高楼层: int = Field(0, description="是否高楼层（是为1，否为0）")
-
-    # 禁止额外字段
     model_config = {"extra": "forbid"}
 
-    # ------------------- 自定义校验器（在全部字段赋值后执行） -------------------
     @model_validator(mode='after')
-    def check_all_rules(self):
-        # 1. 面积必须大于0
-        if self.area <= 0:
-            raise ValueError(f"房屋面积必须大于0，当前为 {self.area}")
-
-        # 2. 建成年份必须在 1900 到 去年 之间
+    def check_rules(self):
+        """
+        对输入数据进行一些规则检查，如年份、面积、城市、户型、楼层等。
+        """
         current_year = datetime.now().year
-        if not (1900 <= self.building_year < current_year):
-            raise ValueError(f"建成年份必须在1900至{current_year - 1}之间，当前为 {self.building_year}")
+        if not (1900 <= self.year <= current_year + 5):
+            raise ValueError(f"年份必须在1900~{current_year+5}之间，当前{self.year}")
+        if self.area <= 0:
+            raise ValueError("面积必须>0")
+        if not (1900 <= self.building_year < self.year):
+            raise ValueError(f"建成年份必须<{self.year}且>=1900")
 
-        # 3. 户型互斥：三个中必须恰好一个为1
-        layout_fields = ['layout_2室1厅', 'layout_3室1厅', 'layout_3室2厅']
-        layout_sum = sum(getattr(self, f) for f in layout_fields)
+        # 城市、户型、楼层互斥检查
+        city_sum = sum(getattr(self, f) for f in ['city_北京','city_上海','city_广州','city_深圳'])
+        if city_sum != 1:
+            raise ValueError("必须且只能选择一个城市")
+        layout_sum = sum(getattr(self, f) for f in ['layout_2室1厅','layout_3室1厅','layout_3室2厅'])
         if layout_sum != 1:
-            raise ValueError(f"户型字段必须且只能选择一个（三个中恰好一个为1），当前和为 {layout_sum}")
-
-        # 4. 楼层互斥：三个中必须恰好一个为1
-        floor_fields = ['floor_info_低楼层', 'floor_info_中楼层', 'floor_info_高楼层']
-        floor_sum = sum(getattr(self, f) for f in floor_fields)
+            raise ValueError("必须且只能选择一个户型")
+        floor_sum = sum(getattr(self, f) for f in ['floor_info_低楼层','floor_info_中楼层','floor_info_高楼层'])
         if floor_sum != 1:
-            raise ValueError(f"楼层字段必须且只能选择一个（三个中恰好一个为1），当前和为 {floor_sum}")
-
-        # 所有校验通过，返回自身
+            raise ValueError("必须且只能选择一个楼层")
         return self
-
 
 @app.post(
     "/predict",
@@ -93,13 +94,15 @@ class HouseInput(BaseModel):
 def predict_price(house: HouseInput):
     try:
         # 将输入转为DataFrame并填充缺失特征
-        input_dict = house.dict()
+        input_dict = house.model_dump()
         df = pd.DataFrame([input_dict])
+        # 计算房龄（与训练时的特征工程保持一致）
+        df['house_age'] = df['year'] - df['building_year']
         # 确保特征列顺序一致
         for col in feature_cols:
             if col not in df.columns:
                 df[col] = 0
-        X = df[feature_cols].values
+        X = df[feature_cols]
         X_scaled = scaler.transform(X)
 
         # 融合预测
@@ -133,7 +136,7 @@ async def analyze_text(text: str):
     }
 
 
-# 在加载完所有模型后（在 root 端点之前或之后均可）
+# 在加载完所有模型后
 @app.get("/health", summary="健康检查（含模型状态）")
 def health_check():
     """返回模型加载状态，用于启动脚本检测"""
@@ -157,4 +160,6 @@ def root():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000,  workers=1)
+    _host = os.environ.get('API_HOST', '127.0.0.1')
+    _port = int(os.environ.get('API_PORT', '8000'))
+    uvicorn.run(app, host=_host, port=_port, workers=1)

@@ -22,6 +22,9 @@ plotly==5.15.0
 dash==2.14.0
 fastapi==0.100.0
 uvicorn[standard]==0.23.2
+pydantic==2.13.4
+email-validator==2.3.0
 
 # 工具（无Docker依赖）
 python-dotenv==1.0.0
+joblib==1.5.3

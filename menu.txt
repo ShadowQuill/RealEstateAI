@@ -1,10 +1,53 @@
-// 项目目录
+// 项目目录结构
 RealEstateAI/
-├── scrapers/          # 爬虫
-├── data_pipeline/     # 数据处理
-├── models/            # 机器学习
-├── nlp_module/        # NLP文本提取
-├── api/               # FastAPI后端
-├── dashboard/         # 可视化看板
-├── data/              # 存放SQLite数据库和CSV文件
-└── utils/             # 工具函数
+│
+├── run_system.py              # 系统启动入口（一键启动API+看板）
+├── requirements.txt           # 项目依赖清单
+├── .env                       # 环境配置（API地址、端口等，不提交到仓库）
+├── menu.txt                   # 本文件：项目目录说明
+│
+├── api/                       # FastAPI 后端接口
+│   └── main.py                #   - API主程序（房价预测、文本分析接口）
+│
+├── dashboard/                 # 可视化看板
+│   └── app.py                 #   - Dash看板主程序
+│
+├── scrapers/                  # 数据爬虫
+│   └── lianjia_spider.py      #   - 链家房产数据爬虫
+│
+├── data_pipeline/             # 数据处理流水线
+│   └── feature_engineering.py #   - 特征工程（数据清洗、独热编码、标准化）
+│
+├── models/                    # 机器学习模型
+│   ├── train.py               #   - 模型训练脚本
+│   ├── xgb_model.pkl          #   - XGBoost模型文件
+│   ├── rf_model.pkl           #   - 随机森林模型文件
+│   ├── blend_model.pkl        #   - 融合模型文件
+│   ├── scaler.pkl             #   - 数据标准化器
+│   └── feature_cols.pkl       #   - 特征列名列表
+│
+├── nlp_module/                # NLP自然语言处理模块
+│   └── ai_analyzer.py         #   - AI分析器（提取价格、检测虚假宣传）
+│
+├── utils/                     # 工具函数
+│   └── database.py            #   - 数据库配置与ORM模型
+│
+├── data/                      # 数据存放目录（SQLite数据库）
+│
+├── log/                       # 日志目录
+│   └── dashboard_debug.log    #   - 看板调试日志
+│
+├── cache/                     # NLP模型缓存（HuggingFace sentence-transformers）
+│
+└── .venv/                     # Python虚拟环境
+
+// 启动方式
+// 1. 一键启动：python run_system.py
+// 2. 单独启动API：python api/main.py
+// 3. 单独启动看板：python dashboard/app.py
+// 4. 训练模型：python models/train.py
+
+// 访问地址（默认值，可在 .env 中修改）
+// API接口文档：http://127.0.0.1:8000/docs
+// 健康检查：http://127.0.0.1:8000/health
+// 可视化看板：http://127.0.0.1:8050
