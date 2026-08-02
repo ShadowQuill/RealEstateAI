@@ -140,16 +140,20 @@ async def analyze_text(text: str):
 @app.get("/health", summary="健康检查（含模型状态）")
 def health_check():
     """返回模型加载状态，用于启动脚本检测"""
+    models_loaded = {
+        "xgb": xgb is not None,
+        "rf": rf is not None,
+        "blend": blend is not None,
+        "scaler": scaler is not None,
+        "feature_cols": feature_cols is not None,
+    }
+    nlp_ok = nlp_engine is not None
+    # 所有模型和NLP引擎都加载成功才算ok
+    all_ok = all(models_loaded.values()) and nlp_ok
     return {
-        "status": "ok",
-        "models_loaded": {
-            "xgb": xgb is not None,
-            "rf": rf is not None,
-            "blend": blend is not None,
-            "scaler": scaler is not None,
-            "feature_cols": feature_cols is not None,
-        },
-        "nlp_engine": nlp_engine is not None
+        "status": "ok" if all_ok else "error",
+        "models_loaded": models_loaded,
+        "nlp_engine": nlp_ok
     }
 
 

@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 import dash
-from dash import dcc, html, Input, Output
+from dash import dcc, html, Input, Output, State, dash_table
 import plotly.express as px
 import pandas as pd
 import requests
@@ -34,7 +34,9 @@ if os.path.exists(LOG_FILE):
 log_debug("========== Dashboard 启动 ==========")
 
 # ---------- 配置 ----------
-API_BASE_URL = os.environ.get('API_BASE_URL', 'http://127.0.0.1:8000')
+_API_HOST = os.environ.get('API_HOST', '127.0.0.1')
+_API_PORT = os.environ.get('API_PORT', '8000')
+API_BASE_URL = f'http://{_API_HOST}:{_API_PORT}'
 
 # ---------- 连接数据库 ----------
 _DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'realestate.db')
@@ -69,25 +71,68 @@ def call_api_with_retry(features, max_retries=2, timeout=3):
 # ---------- Dash 应用 ----------
 app_dash = dash.Dash(__name__)
 
-# 🔄 修改：布局中新增两个图表（历史趋势 + 未来预测）
 app_dash.layout = html.Div([
-    html.H1("🏠 全国二手房数据看板（AI预测版）", style={'textAlign': 'center'}),
-    dcc.Dropdown(
-        id='city-filter',
-        options=[{'label': c, 'value': c} for c in ['北京', '上海', '广州', '深圳']],
-        value='北京'
-    ),
-    # 第一行：两个并排图表（散点图 + 历史趋势）
-    html.Div([
-        dcc.Graph(id='price-scatter', style={'width': '49%', 'display': 'inline-block'}),
-        dcc.Graph(id='history-trend', style={'width': '49%', 'display': 'inline-block'})  # 🆕 新增
+    dcc.Location(id='url', refresh=False),
+    dcc.Store(id='city-store'),
+    # ===== 主页面 =====
+    html.Div(id='main-page', children=[
+        html.H1("🏠 全国二手房数据看板（AI预测版）", style={'textAlign': 'center'}),
+        dcc.Dropdown(
+            id='city-filter',
+            options=[{'label': c, 'value': c} for c in ['北京', '上海', '广州', '深圳']],
+            value='北京'
+        ),
+        # 第一行：两个并排图表（散点图 + 历史趋势）
+        html.Div([
+            dcc.Graph(id='price-scatter', style={'width': '49%', 'display': 'inline-block'}),
+            dcc.Graph(id='history-trend', style={'width': '49%', 'display': 'inline-block'})
+        ]),
+        # 第二行：两个并排图表（预测对比 + 未来预测）
+        html.Div([
+            dcc.Graph(id='prediction-vs-actual', style={'width': '49%', 'display': 'inline-block'}),
+            dcc.Graph(id='future-prediction', style={'width': '49%', 'display': 'inline-block'})
+        ]),
+        html.Div(id='status-message', style={'textAlign': 'center', 'color': 'gray'}),
+        html.Div(id='status-future', style={'textAlign': 'center', 'color': 'gray'}),
+        # 🆕 查看更多按钮
+        html.Div(
+            html.Button('📋 查看更多', id='btn-more', n_clicks=0,
+                        style={'fontSize': '16px', 'padding': '10px 24px', 'cursor': 'pointer',
+                               'marginTop': '10px'}),
+            style={'textAlign': 'center'}
+        ),
     ]),
-    # 第二行：两个并排图表（预测对比 + 未来预测）
-    html.Div([
-        dcc.Graph(id='prediction-vs-actual', style={'width': '49%', 'display': 'inline-block'}),
-        dcc.Graph(id='future-prediction', style={'width': '49%', 'display': 'inline-block'})  # 🆕 新增
+    # ===== 详情页 =====
+    html.Div(id='detail-page', style={'display': 'none'}, children=[
+        html.Div([
+            html.Button('← 返回看板', id='btn-back', n_clicks=0,
+                        style={'fontSize': '16px', 'padding': '8px 20px', 'cursor': 'pointer'}),
+            html.H2(id='detail-title', style={'display': 'inline-block', 'marginLeft': '20px'}),
+        ], style={'padding': '16px'}),
+        # 筛选器
+        html.Div([
+            html.Label('户型：'),
+            dcc.Dropdown(id='detail-layout-filter',
+                         options=[{'label': '全部', 'value': 'all'}],
+                         value='all', style={'width': '200px', 'display': 'inline-block'}),
+            html.Label('楼层：', style={'marginLeft': '20px'}),
+            dcc.Dropdown(id='detail-floor-filter',
+                         options=[{'label': '全部', 'value': 'all'}],
+                         value='all', style={'width': '200px', 'display': 'inline-block'}),
+            html.Label('排序：', style={'marginLeft': '20px'}),
+            dcc.Dropdown(id='detail-sort',
+                         options=[
+                             {'label': '默认', 'value': 'default'},
+                             {'label': '总价从低到高', 'value': 'price_asc'},
+                             {'label': '总价从高到低', 'value': 'price_desc'},
+                             {'label': '面积从小到大', 'value': 'area_asc'},
+                             {'label': '面积从大到小', 'value': 'area_desc'},
+                         ],
+                         value='default', style={'width': '200px', 'display': 'inline-block'}),
+        ], style={'padding': '0 16px 16px'}),
+        # 数据表
+        html.Div(id='detail-table-container', style={'padding': '0 16px'}),
     ]),
-    html.Div(id='status-message', style={'textAlign': 'center', 'color': 'gray'})
 ])
 
 
@@ -133,6 +178,7 @@ def update_history(city):
 @app_dash.callback(
     Output('prediction-vs-actual', 'figure'),
     Output('status-message', 'children'),
+    Output('city-store', 'data'),
     Input('city-filter', 'value')
 )
 def update_prediction(city):
@@ -142,14 +188,14 @@ def update_prediction(city):
     df_city = df[df['city'] == city]
     if df_city.empty:
         log_debug(f"城市 {city} 无数据")
-        return px.bar(title=f'{city} 暂无数据'), f'⚠️ 城市 {city} 无数据'
+        return px.bar(title=f'{city} 暂无数据'), f'⚠️ 城市 {city} 无数据', ''
 
     layouts = df_city['layout'].dropna().unique()
     floors = df_city['floor_info'].dropna().unique()
     log_debug(f"数据库中的户型值: {layouts}")
     log_debug(f"数据库中的楼层值: {floors}")
 
-    df_sample = df_city.head(10).copy()
+    df_sample = df_city.sample(min(10, len(df_city))).copy()
     predictions = []
     api_ok = True
     error_msg = ""
@@ -182,7 +228,7 @@ def update_prediction(city):
             log_debug(f"  面积无效，设为80")
 
         year_val = row['building_year']
-        current_year = 2026
+        current_year = datetime.now().year
         if pd.isnull(year_val) or not (1900 <= year_val < current_year):
             year_val = 2000
             log_debug(f"  建成年份无效，设为2000")
@@ -230,24 +276,25 @@ def update_prediction(city):
             error_msg += '\n' + err
 
     df_sample['predicted'] = predictions
-    status = "✅ 所有数据预测成功" if api_ok else f"⚠️ 部分数据预测失败。{error_msg}"
+    status = "✅ 所有房源数据预测成功" if api_ok else f"⚠️ 部分房源数据预测失败。{error_msg}"
     log_debug(f"最终状态: {status}")
 
     fig = px.bar(
         df_sample,
         x='title',
         y=['price', 'predicted'],
-        title=f'{city} 实际价格 vs AI预测价格（前10条记录）',
+        title=f'{city} 实际价格 vs AI预测价格（随机10条记录）',
         labels={'value': '万元', 'title': '房源', 'variable': '类型'},
         barmode='group'
     )
     log_debug("========== 回调结束 ==========\n")
-    return fig, status
+    return fig, status, city
 
 
 # 🆕 新增：回调4 - 未来3年预测曲线
 @app_dash.callback(
     Output('future-prediction', 'figure'),
+    Output('status-future', 'children'),
     Input('city-filter', 'value')
 )
 def update_future(city):
@@ -257,33 +304,68 @@ def update_future(city):
     df = pd.read_sql(text("SELECT * FROM houses WHERE city=:city ORDER BY year DESC LIMIT 1"), engine, params={"city": city})
     if df.empty:
         log_debug(f"城市 {city} 无样本")
-        return px.scatter(title=f'{city} 无样本，无法预测未来')
+        return px.scatter(title=f'{city} 无样本，无法预测未来'), f'⚠️ 城市 {city} 无样本'
 
     sample = df.iloc[0]
     current_year = datetime.now().year
-    future_years = [current_year + i for i in range(1, 4)]  # 未来3年
+    future_years = [current_year + i for i in range(1, 4)]  # 未来3年(+1,2,3)
 
-    log_debug(f"参考样本年份: {sample['year']}, 面积: {sample['area']}, 户型: {sample['layout']}")
+    # ---- 清洗数值 ----
+    area_val = sample['area']
+    if pd.isnull(area_val) or area_val <= 0:
+        area_val = 80.0
+        log_debug(f"  面积无效，设为80")
+
+    year_val = sample['building_year']
+    if pd.isnull(year_val) or not (1900 <= year_val < current_year):
+        year_val = 2000
+        log_debug(f"  建成年份无效，设为2000")
+
+    # ---- 清洗分类（映射归一化） ----
+    layout_map = {
+        '2室1厅': '2室1厅',
+        '2室2厅': '2室1厅',
+        '3室1厅': '3室1厅',
+        '3室2厅': '3室2厅',
+        '3室3厅': '3室2厅',
+        '4室2厅': '3室2厅',
+    }
+    floor_map = {
+        '低楼层': '低楼层',
+        '低层': '低楼层',
+        '中楼层': '中楼层',
+        '中层': '中楼层',
+        '高楼层': '高楼层',
+        '高层': '高楼层',
+    }
+    layout_raw = str(sample.get('layout', '')).strip()
+    floor_raw = str(sample.get('floor_info', '')).strip()
+    layout_std = layout_map.get(layout_raw, '3室2厅')
+    floor_std = floor_map.get(floor_raw, '中楼层')
+
+    log_debug(f"参考样本年份: {sample['year']}, 面积: {area_val}, 户型: '{layout_raw}' -> '{layout_std}', 楼层: '{floor_raw}' -> '{floor_std}'")
 
     predictions = []
     pred_years = []
+    api_ok = True
+    error_msg = ""
 
     for yr in future_years:
-        # 构造特征（使用样本的特征，只改变年份）
+        # 构造特征（使用归一化后的样本特征，只改变年份）
         features = {
             'year': yr,  # 核心：传入未来年份
-            'area': float(sample['area']),
-            'building_year': int(sample['building_year']),
+            'area': float(area_val),
+            'building_year': int(year_val),
             'city_北京': 1 if city == '北京' else 0,
             'city_上海': 1 if city == '上海' else 0,
             'city_广州': 1 if city == '广州' else 0,
             'city_深圳': 1 if city == '深圳' else 0,
-            'layout_2室1厅': 1 if sample['layout'] == '2室1厅' else 0,
-            'layout_3室1厅': 1 if sample['layout'] == '3室1厅' else 0,
-            'layout_3室2厅': 1 if sample['layout'] == '3室2厅' else 0,
-            'floor_info_低楼层': 1 if sample['floor_info'] == '低楼层' else 0,
-            'floor_info_中楼层': 1 if sample['floor_info'] == '中楼层' else 0,
-            'floor_info_高楼层': 1 if sample['floor_info'] == '高楼层' else 0,
+            'layout_2室1厅': 1 if layout_std == '2室1厅' else 0,
+            'layout_3室1厅': 1 if layout_std == '3室1厅' else 0,
+            'layout_3室2厅': 1 if layout_std == '3室2厅' else 0,
+            'floor_info_低楼层': 1 if floor_std == '低楼层' else 0,
+            'floor_info_中楼层': 1 if floor_std == '中楼层' else 0,
+            'floor_info_高楼层': 1 if floor_std == '高楼层' else 0,
         }
 
         log_debug(f"预测 {yr} 年，特征: {json.dumps(features, ensure_ascii=False)}")
@@ -294,19 +376,135 @@ def update_future(city):
             log_debug(f"  {yr}年预测成功: {pred}")
         else:
             log_debug(f"  {yr}年预测失败: {err}")
+            api_ok = False
+            error_msg += '\n' + err
 
     if not predictions:
-        return px.scatter(title='未来预测失败（API未响应）')
+        return px.scatter(title='未来预测失败（API未响应）'), f'❌ 未来预测失败（API未响应）'
 
     df_future = pd.DataFrame({'year': pred_years, 'pred_price': predictions})
     fig = px.line(df_future, x='year', y='pred_price', markers=True,
                   title=f'{city} 未来3年价格预测（基于 {sample["year"]} 年样本）',
                   labels={'year': '年份', 'pred_price': '预测总价(万元)'})
-    log_debug("========== 未来预测回调结束 ==========\n")
-    return fig
+    status = "✅ 未来3年预测成功" if api_ok else f"⚠️ 部分年份预测失败。{error_msg}"
+    log_debug(f"========== 未来预测回调结束，状态: {status} ==========\n")
+    return fig, status
+
+
+# 🆕 回调5：页面导航 - 查看更多
+@app_dash.callback(
+    Output('url', 'pathname', allow_duplicate=True),
+    Input('btn-more', 'n_clicks'),
+    prevent_initial_call=True
+)
+def navigate_to_detail(n_clicks):
+    if n_clicks:
+        return '/details'
+    return dash.no_update
+
+
+# 🆕 回调6：页面导航 - 返回
+@app_dash.callback(
+    Output('url', 'pathname', allow_duplicate=True),
+    Input('btn-back', 'n_clicks'),
+    prevent_initial_call=True
+)
+def navigate_back(n_clicks):
+    if n_clicks:
+        return '/'
+    return dash.no_update
+
+
+# 🆕 回调7：主页面 / 详情页 显示切换
+@app_dash.callback(
+    Output('main-page', 'style'),
+    Output('detail-page', 'style'),
+    Input('url', 'pathname')
+)
+def show_page(pathname):
+    if pathname == '/details':
+        return {'display': 'none'}, {}
+    return {}, {'display': 'none'}
+
+
+# 🆕 回调8：详情页 - 筛选器选项 + 数据表
+@app_dash.callback(
+    Output('detail-table-container', 'children'),
+    Output('detail-layout-filter', 'options'),
+    Output('detail-floor-filter', 'options'),
+    Output('detail-title', 'children'),
+    Input('city-store', 'data'),
+    Input('detail-layout-filter', 'value'),
+    Input('detail-floor-filter', 'value'),
+    Input('detail-sort', 'value'),
+    prevent_initial_call=True
+)
+def update_detail_table(city, layout_val, floor_val, sort_val):
+    if not city:
+        return html.P('请先在看板中选择城市'), [], [], ''
+
+    df = pd.read_sql("SELECT * FROM houses", engine)
+    df_city = df[df['city'] == city].copy()
+
+    if df_city.empty:
+        return html.P(f'{city} 暂无数据'), [], [], f'{city} 全部房源数据'
+
+    # ---- 生成筛选器选项 ----
+    layouts = sorted(df_city['layout'].dropna().unique().tolist())
+    floors = sorted(df_city['floor_info'].dropna().unique().tolist())
+    layout_opts = [{'label': '全部', 'value': 'all'}] + [{'label': l, 'value': l} for l in layouts]
+    floor_opts = [{'label': '全部', 'value': 'all'}] + [{'label': f, 'value': f} for f in floors]
+
+    # ---- 筛选 ----
+    if layout_val and layout_val != 'all':
+        df_city = df_city[df_city['layout'] == layout_val]
+    if floor_val and floor_val != 'all':
+        df_city = df_city[df_city['floor_info'] == floor_val]
+
+    # ---- 排序 ----
+    if sort_val == 'price_asc':
+        df_city = df_city.sort_values('price', ascending=True)
+    elif sort_val == 'price_desc':
+        df_city = df_city.sort_values('price', ascending=False)
+    elif sort_val == 'area_asc':
+        df_city = df_city.sort_values('area', ascending=True)
+    elif sort_val == 'area_desc':
+        df_city = df_city.sort_values('area', ascending=False)
+
+    # ---- 构造表格 ----
+    col_map = {
+        'title': '标题', 'price': '总价(万)', 'area': '面积(㎡)',
+        'layout': '户型', 'floor_info': '楼层', 'building_year': '建成年份',
+        'year': '交易年份',
+    }
+    display_cols = list(col_map.keys())
+    display_names = [col_map[c] for c in display_cols]
+
+    table_df = df_city[display_cols].copy()
+    table_df.columns = display_names
+
+    table = dash_table.DataTable(
+        data=table_df.to_dict('records'),
+        columns=[{'name': c, 'id': c} for c in display_names],
+        page_size=20,
+        sort_action='native',
+        filter_action='native',
+        style_table={'overflowX': 'auto'},
+        style_cell={'textAlign': 'center', 'padding': '8px'},
+        style_header={'backgroundColor': '#f0f0f0', 'fontWeight': 'bold'},
+        style_data_conditional=[{
+            'if': {'row_index': 'odd'},
+            'backgroundColor': '#fafafa'
+        }],
+    )
+
+    title = f'{city} 全部房源数据（共 {len(df_city)} 条）'
+    return table, layout_opts, floor_opts, title
+
 
 
 # ---------- 启动 ----------
 if __name__ == '__main__':
+    d_host = os.environ.get('DASHBOARD_HOST', '127.0.0.1')
     d_port = int(os.environ.get('DASHBOARD_PORT', '8050'))
-    app_dash.run(debug=True, port=d_port)
+    app_dash.run(debug=True, host=d_host, port=d_port)

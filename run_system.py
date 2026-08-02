@@ -11,7 +11,10 @@ import multiprocessing
 import requests
 import sys
 
-API_URL = os.environ.get('API_BASE_URL', 'http://127.0.0.1:8000')
+API_HOST = os.environ.get('API_HOST', '127.0.0.1')
+API_PORT = os.environ.get('API_PORT', '8000')
+API_URL = f'http://{API_HOST}:{API_PORT}'
+DASHBOARD_HOST = os.environ.get('DASHBOARD_HOST', '127.0.0.1')
 DASHBOARD_PORT = os.environ.get('DASHBOARD_PORT', '8050')
 HEALTH_CHECK_ENDPOINT = "/health"
 MAX_RETRIES = 40
@@ -37,7 +40,14 @@ def wait_for_api():
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("status") == "ok":
-                    print("✅ 后端已就绪，模型加载完成")
+                    # 打印各模型加载状态
+                    models = data.get("models_loaded", {})
+                    nlp_ok = data.get("nlp_engine", False)
+                    for name, loaded in models.items():
+                        tag = "✅" if loaded else "❌"
+                        print(f"  {tag} {name}")
+                    print(f"  {'✅' if nlp_ok else '❌'} nlp_engine")
+                    print("✅ 后端已就绪，所有模型加载完成")
                     return True
         except requests.exceptions.RequestException:
             pass
@@ -68,7 +78,7 @@ if __name__ == "__main__":
     print(f"✅ 后端已启动，访问 {API_URL}/docs 查看接口文档")
 
     dash_proc = start_dashboard()
-    print(f"✅ 看板已启动，访问 http://127.0.0.1:{DASHBOARD_PORT}")
+    print(f"✅ 看板已启动，访问 http://{DASHBOARD_HOST}:{DASHBOARD_PORT}")
 
     try:
         api_proc.wait()
