@@ -179,7 +179,7 @@ def _house_to_dict(h):
         "price": float(h.price) if h.price else None,
         "unit_price": float(h.unit_price) if h.unit_price else None,
         "area": float(h.area) if h.area else None,
-        "rooms": getattr(h, 'rooms', None) or getattr(h, 'layout', None),
+        "rooms": getattr(h, 'rooms', None),
         "floor_info": getattr(h, 'floor_info', None),
         "orientation": getattr(h, 'orientation', None),
         "decoration": getattr(h, 'decoration', None),
@@ -261,8 +261,6 @@ def get_city_stats(city: str):
         
         region_col = getattr(House, 'region', None)
         rooms_col = getattr(House, 'rooms', None)
-        if rooms_col is None:
-            rooms_col = getattr(House, 'layout', None)
         
         regions = []
         if region_col is not None:
@@ -324,7 +322,7 @@ def get_listing_detail(listing_id: int):
             ).limit(10).all()
             result["same_community"] = [
                 {"id": s.id, "title": s.title, "price": float(s.price) if s.price else None,
-                 "area": float(s.area) if s.area else None, "rooms": getattr(s, 'rooms', None) or getattr(s, 'layout', None)}
+                 "area": float(s.area) if s.area else None, "rooms": getattr(s, 'rooms', None)}
                 for s in same
             ]
         

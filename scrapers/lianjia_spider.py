@@ -13,25 +13,13 @@ import os
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.database import SessionLocal, House, init_db
+# 城市列表统一从 utils.constants 引入（单一数据源）
+from utils.constants import CITY_URL_MAP, ALL_CITIES  # noqa: F401
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
     'Accept': 'text/html,application/xhtml+xml',
     'Accept-Language': 'zh-CN,zh;q=0.9',
-}
-
-CITY_URL_MAP = {
-    '北京': 'bj',
-    '上海': 'sh',
-    '广州': 'gz',
-    '深圳': 'sz',
-    '杭州': 'hz',
-    '成都': 'cd',
-    '武汉': 'wh',
-    '南京': 'nj',
-    '天津': 'tj',
-    '重庆': 'cq',
-    '苏州': 'sz',   # 用简写
 }
 
 DATA_SOURCES = {
@@ -51,6 +39,25 @@ DEMO_CITY_DATA = {
     '南京': {'avg_price': 320, 'avg_area': 92, 'districts': ['鼓楼', '玄武', '秦淮', '建邺', '栖霞']},
     '天津': {'avg_price': 250, 'avg_area': 88, 'districts': ['河西', '和平', '南开', '河北', '河东']},
     '重庆': {'avg_price': 160, 'avg_area': 98, 'districts': ['渝中', '江北', '南岸', '沙坪坝', '九龙坡']},
+    '苏州': {'avg_price': 290, 'avg_area': 96, 'districts': ['姑苏', '工业园区', '高新区', '吴中', '相城', '吴江']},
+    '西安': {'avg_price': 175, 'avg_area': 102, 'districts': ['雁塔', '碑林', '新城', '莲湖', '未央', '高新']},
+    '郑州': {'avg_price': 155, 'avg_area': 104, 'districts': ['金水', '中原', '二七', '管城', '郑东新区', '高新区']},
+    '长沙': {'avg_price': 135, 'avg_area': 108, 'districts': ['芙蓉', '天心', '岳麓', '开福', '雨花', '望城']},
+    '合肥': {'avg_price': 175, 'avg_area': 100, 'districts': ['庐阳', '蜀山', '包河', '瑶海', '政务区', '滨湖']},
+    '青岛': {'avg_price': 195, 'avg_area': 98, 'districts': ['市南', '市北', '李沧', '崂山', '城阳', '黄岛']},
+    '东莞': {'avg_price': 245, 'avg_area': 92, 'districts': ['南城', '东城', '莞城', '万江', '松山湖', '虎门']},
+    '佛山': {'avg_price': 185, 'avg_area': 100, 'districts': ['禅城', '南海', '顺德', '三水', '高明']},
+    '宁波': {'avg_price': 245, 'avg_area': 97, 'districts': ['海曙', '江北', '鄞州', '镇海', '北仑']},
+    '大连': {'avg_price': 150, 'avg_area': 95, 'districts': ['中山', '西岗', '沙河口', '甘井子', '高新园区']},
+    '沈阳': {'avg_price': 120, 'avg_area': 96, 'districts': ['和平', '沈河', '皇姑', '铁西', '大东', '浑南']},
+    '济南': {'avg_price': 165, 'avg_area': 101, 'districts': ['历下', '市中', '槐荫', '天桥', '历城', '高新']},
+    '昆明': {'avg_price': 125, 'avg_area': 99, 'districts': ['五华', '盘龙', '官渡', '西山', '呈贡']},
+    '厦门': {'avg_price': 380, 'avg_area': 88, 'districts': ['思明', '湖里', '集美', '海沧', '同安']},
+    '福州': {'avg_price': 215, 'avg_area': 100, 'districts': ['鼓楼', '台江', '仓山', '晋安', '马尾']},
+    '无锡': {'avg_price': 175, 'avg_area': 102, 'districts': ['梁溪', '滨湖', '新吴', '锡山', '惠山']},
+    '珠海': {'avg_price': 260, 'avg_area': 90, 'districts': ['香洲', '金湾', '斗门', '横琴']},
+    '哈尔滨': {'avg_price': 100, 'avg_area': 94, 'districts': ['道里', '南岗', '道外', '香坊', '松北']},
+    '南宁': {'avg_price': 120, 'avg_area': 103, 'districts': ['青秀', '兴宁', '江南', '西乡塘', '良庆']},
 }
 
 LAYOUT_TYPES = ['1室0厅', '1室1厅', '2室1厅', '2室2厅', '3室1厅', '3室2厅', '4室2厅', '4室3厅', '5室2厅', '5室3厅']
@@ -251,7 +258,7 @@ def generate_historical_data():
             for year in range(2022, 2025):
                 # 价格随时间递减（模拟历史数据：现在价格最高）
                 year_factor = 1.0 - (2025 - year) * 0.08
-                for base in base_data[:3]:
+                for base in base_data[:8]:
                     price_mult = year_factor * random.uniform(0.92, 1.08)
                     
                     new_house = House(

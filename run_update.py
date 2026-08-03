@@ -15,6 +15,9 @@ from utils.database import SessionLocal, House, init_db, migrate_db
 from scrapers.lianjia_spider import parse_listing_page, save_to_db, generate_historical_data, CITY_URL_MAP, DATA_SOURCES
 from models.train import train
 
+# 每个城市每个平台抓取的列表页数量（可用环境变量 PAGES_PER_CITY 覆盖）
+PAGES_PER_CITY = int(os.environ.get('PAGES_PER_CITY', '3'))
+
 
 def clear_old_data():
     db = SessionLocal()
@@ -33,11 +36,11 @@ def clear_old_data():
         db.close()
 
 
-def run_spider():
+def run_spider(pages_per_city=PAGES_PER_CITY):
     cities = list(CITY_URL_MAP.keys())
     print("\n" + "=" * 50)
     print("📡 第一步：从链家 + 贝壳爬取真实房源数据")
-    print(f"🏙️  共 {len(cities)} 个城市，2 个平台")
+    print(f"🏙️  共 {len(cities)} 个城市，2 个平台，每城市每平台 {pages_per_city} 页")
     print("=" * 50)
 
     total = 0
@@ -46,15 +49,15 @@ def run_spider():
         print("-" * 40)
         for city in cities:
             city_url_name = CITY_URL_MAP[city]
-            print(f"  🏙️ {city} 第1页", end='')
-            houses = parse_listing_page(city, city_url_name, 1, domain=domain)
-            if not houses:
-                print(" (无数据)")
-            else:
-                saved = save_to_db(houses)
-                total += saved
-                print(f" [{len(houses)}条]")
-            time.sleep(random.uniform(2.0, 5.0))
+            city_total = 0
+            for page in range(1, pages_per_city + 1):
+                houses = parse_listing_page(city, city_url_name, page, domain=domain)
+                if houses:
+                    saved = save_to_db(houses)
+                    total += saved
+                    city_total += saved
+                time.sleep(random.uniform(1.0, 2.5))
+            print(f"  🏙️ {city}: 新增 {city_total} 条")
 
     print(f"\n🎉 爬取完成，共写入 {total} 条真实房源数据")
 

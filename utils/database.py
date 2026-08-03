@@ -27,7 +27,7 @@ class House(Base):
     price = Column(Float)
     unit_price = Column(Float)
     area = Column(Float)
-    rooms = Column(String, nullable=True)           # 户型（如 3室2厅）
+    rooms = Column(String, nullable=True)           # 户型（如 3室2厅），唯一户型字段
     floor_info = Column(String, nullable=True)       # 楼层信息
     orientation = Column(String, nullable=True)      # 朝向
     decoration = Column(String, nullable=True)       # 装修情况
@@ -61,7 +61,7 @@ def migrate_db():
         'description': 'Text',
         'crawled_at': 'DateTime',
     }
-    
+
     with engine.connect() as conn:
         for col_name, col_type in new_columns.items():
             if col_name not in existing_cols:
@@ -71,6 +71,22 @@ def migrate_db():
                     print(f"  ✅ 添加列: {col_name} ({col_type})")
                 except Exception as e:
                     print(f"  ⚠️ 跳过 {col_name}: {e}")
+
+        # 清理冗余的 layout 列：户型统一由 rooms 承载
+        if 'layout' in existing_cols:
+            try:
+                # 先把 rooms 缺失但 layout 有值的记录补回，避免丢数据
+                conn.execute(text(
+                    "UPDATE houses SET rooms = layout "
+                    "WHERE (rooms IS NULL OR rooms = '') AND layout IS NOT NULL AND layout != ''"
+                ))
+                conn.execute(text("ALTER TABLE houses DROP COLUMN layout"))
+                conn.commit()
+                print("  ✅ 移除冗余列: layout（已并入 rooms）")
+            except Exception as e:
+                # SQLite < 3.35 不支持 DROP COLUMN，保留旧列不影响运行
+                print(f"  ⚠️ 未能移除 layout 列（可忽略）: {e}")
+
         print("✅ 数据库迁移完成")
 
 

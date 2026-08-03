@@ -115,6 +115,8 @@ export default function DashboardPage() {
                 <YAxis type="category" dataKey="name" width={50} tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
                 <Tooltip
                   contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }}
+                  labelStyle={{ color: 'hsl(var(--card-foreground))' }}
+                  itemStyle={{ color: 'hsl(var(--card-foreground))' }}
                   formatter={(value: number) => [`${value}万`, '均价']}
                 />
                 <Bar dataKey="price" radius={[0, 6, 6, 0]}>
@@ -143,6 +145,8 @@ export default function DashboardPage() {
                 <YAxis type="number" dataKey="price" name="总价" unit="万" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                 <Tooltip
                   contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }}
+                  labelStyle={{ color: 'hsl(var(--card-foreground))' }}
+                  itemStyle={{ color: 'hsl(var(--card-foreground))' }}
                   formatter={(value: number, name: string) => [name === 'price' ? `${value}万` : `${value}㎡`, name === 'price' ? '总价' : '面积']}
                 />
                 <Scatter data={overview?.price_area_scatter?.slice(0, 2000) || []} fill="hsl(var(--primary) / 0.6)" />

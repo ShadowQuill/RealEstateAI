@@ -1,9 +1,16 @@
 # dashboard/app.py
 import os
+import sys
+
+# 保证以 `python dashboard/app.py` 直接运行时也能导入 utils 包
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 from dotenv import load_dotenv
 
 # 加载项目根目录的 .env 配置文件
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
+load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 import dash
 from dash import dcc, html, Input, Output, State, dash_table
@@ -44,33 +51,15 @@ _DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'realestate.db'
 engine = create_engine(f"sqlite:///{_DB_PATH}")
 
 
-# ---------- 辅助函数：清洗脏layout数据 ----------
-import re as _re
+# ---------- 领域常量与清洗逻辑：统一来自 utils.constants ----------
+from utils.constants import (
+    ALL_CITIES,
+    SUPPORTED_LAYOUTS,
+    SUPPORTED_FLOORS,
+    normalize_layout,
+    clean_floor as _clean_floor,
+)
 
-def _clean_layout(raw):
-    """从混合文本中提取纯户型（如 '3室2厅'）"""
-    if not raw or pd.isna(raw):
-        return '3室2厅'
-    m = _re.search(r'(\d+[室房]\d*厅?)', str(raw))
-    return m.group(1) if m else '3室2厅'
-
-def _clean_floor(raw):
-    if not raw or pd.isna(raw):
-        return '中楼层'
-    s = str(raw)
-    if '低' in s: return '低楼层'
-    if '高' in s: return '高楼层'
-    return '中楼层'
-
-# 所有支持的城市列表
-ALL_CITIES = [
-    '北京', '上海', '广州', '深圳',
-    '成都', '重庆', '杭州', '武汉', '天津',
-    '苏州', '南京', '西安', '郑州', '长沙',
-    '合肥', '青岛', '东莞', '佛山', '宁波',
-    '大连', '沈阳', '济南', '昆明', '厦门',
-    '福州', '无锡', '珠海', '哈尔滨', '南宁',
-]
 
 def _build_city_features(city):
     """生成29个城市的独热编码特征"""
@@ -113,14 +102,7 @@ app_dash.layout = html.Div([
         html.H1("🏠 全国二手房数据看板（AI预测版）", style={'textAlign': 'center'}),
         dcc.Dropdown(
             id='city-filter',
-            options=[{'label': c, 'value': c} for c in [
-                '北京', '上海', '广州', '深圳',
-                '成都', '重庆', '杭州', '武汉', '天津',
-                '苏州', '南京', '西安', '郑州', '长沙',
-                '合肥', '青岛', '东莞', '佛山', '宁波',
-                '大连', '沈阳', '济南', '昆明', '厦门',
-                '福州', '无锡', '珠海', '哈尔滨', '南宁',
-            ]],
+            options=[{'label': c, 'value': c} for c in ALL_CITIES],
             value='北京'
         ),
         # 第一行：两个并排图表（散点图 + 历史趋势）
@@ -231,26 +213,12 @@ def update_prediction(city):
         log_debug(f"城市 {city} 无数据")
         return px.bar(title=f'{city} 暂无数据'), f'⚠️ 城市 {city} 无数据', ''
 
-    log_debug(f"数据库中的户型值: {df_city['layout'].dropna().unique()}")
+    log_debug(f"数据库中的户型值: {df_city['rooms'].dropna().unique()}")
     log_debug(f"数据库中的楼层值: {df_city['floor_info'].dropna().unique()}")
 
     # 减少样本数：从10条改为5条，大幅减少API调用时间
     N_SAMPLE = 5
     df_sample = df_city.sample(min(N_SAMPLE, len(df_city))).copy()
-
-    # 映射表
-    layout_map = {
-        '2室0厅': '2室1厅', '2室1厅': '2室1厅', '2室2厅': '2室1厅',
-        '3室1厅': '3室1厅', '3室2厅': '3室2厅', '3室3厅': '3室2厅',
-        '1室0厅': '2室1厅', '1室1厅': '2室1厅', '1室2厅': '2室1厅',
-        '4室1厅': '3室2厅', '4室2厅': '3室2厅', '5室2厅': '3室2厅',
-        '6室2厅': '3室2厅', '0室0厅': '3室2厅',
-    }
-    floor_map = {
-        '低楼层': '低楼层', '低层': '低楼层',
-        '中楼层': '中楼层', '中层': '中楼层',
-        '高楼层': '高楼层', '高层': '高楼层',
-    }
 
     # 先构建所有特征字典（不调用API）
     feature_dicts = []
@@ -266,12 +234,8 @@ def update_prediction(city):
 
         trade_year = int(row['year']) if 'year' in row and pd.notnull(row['year']) else 2020
 
-        layout_raw = str(row.get('layout', '')).strip()
-        floor_raw = str(row.get('floor_info', '')).strip()
-        layout_clean = _clean_layout(layout_raw)
-        floor_clean = _clean_floor(floor_raw)
-        layout_std = layout_map.get(layout_clean, '3室2厅')
-        floor_std = floor_map.get(floor_clean, '中楼层')
+        layout_std = normalize_layout(row.get('rooms'))
+        floor_std = _clean_floor(row.get('floor_info'))
 
         features = {
             'year': trade_year,
@@ -279,14 +243,8 @@ def update_prediction(city):
             'building_year': int(year_val),
         }
         features.update(_build_city_features(city))
-        features.update({
-            'layout_2室1厅': 1.0 if layout_std == '2室1厅' else 0.0,
-            'layout_3室1厅': 1.0 if layout_std == '3室1厅' else 0.0,
-            'layout_3室2厅': 1.0 if layout_std == '3室2厅' else 0.0,
-            'floor_info_低楼层': 1.0 if floor_std == '低楼层' else 0.0,
-            'floor_info_中楼层': 1.0 if floor_std == '中楼层' else 0.0,
-            'floor_info_高楼层': 1.0 if floor_std == '高楼层' else 0.0,
-        })
+        features.update({f'layout_{l}': 1.0 if layout_std == l else 0.0 for l in SUPPORTED_LAYOUTS})
+        features.update({f'floor_info_{f}': 1.0 if floor_std == f else 0.0 for f in SUPPORTED_FLOORS})
         feature_dicts.append(features)
 
     # 并行调用API（ThreadPoolExecutor），大幅减少总耗时
@@ -456,15 +414,15 @@ def update_detail_table(city, layout_val, floor_val, sort_val):
     if df_city.empty:
         return html.P(f'{city} 暂无数据'), [], [], f'{city} 全部房源数据'
 
-    # ---- 生成筛选器选项 ----
-    layouts = sorted(df_city['layout'].dropna().unique().tolist())
+    # ---- 生成筛选器选项（户型统一读取 rooms 列） ----
+    layouts = sorted(df_city['rooms'].dropna().unique().tolist())
     floors = sorted(df_city['floor_info'].dropna().unique().tolist())
     layout_opts = [{'label': '全部', 'value': 'all'}] + [{'label': l, 'value': l} for l in layouts]
     floor_opts = [{'label': '全部', 'value': 'all'}] + [{'label': f, 'value': f} for f in floors]
 
     # ---- 筛选 ----
     if layout_val and layout_val != 'all':
-        df_city = df_city[df_city['layout'] == layout_val]
+        df_city = df_city[df_city['rooms'] == layout_val]
     if floor_val and floor_val != 'all':
         df_city = df_city[df_city['floor_info'] == floor_val]
 
@@ -481,7 +439,7 @@ def update_detail_table(city, layout_val, floor_val, sort_val):
     # ---- 构造表格 ----
     col_map = {
         'title': '标题', 'price': '总价(万)', 'area': '面积(㎡)',
-        'layout': '户型', 'floor_info': '楼层', 'building_year': '建成年份',
+        'rooms': '户型', 'floor_info': '楼层', 'building_year': '建成年份',
         'year': '交易年份',
     }
     display_cols = list(col_map.keys())
