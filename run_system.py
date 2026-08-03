@@ -11,6 +11,7 @@ import multiprocessing
 import requests
 import sys
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 API_HOST = os.environ.get('API_HOST', '127.0.0.1')
 API_PORT = os.environ.get('API_PORT', '8000')
 API_URL = f'http://{API_HOST}:{API_PORT}'
@@ -24,10 +25,11 @@ TIMEOUT = 2
 
 def start_api():
     proc = subprocess.Popen(
-        ["python", "api/main.py"],
+        [sys.executable, os.path.join(BASE_DIR, 'api', 'main.py')],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        text=True
+        text=True,
+        cwd=BASE_DIR,
     )
     return proc
 
@@ -59,10 +61,11 @@ def wait_for_api():
 
 def start_dashboard():
     proc = subprocess.Popen(
-        ["python", "dashboard/app.py"],
+        [sys.executable, os.path.join(BASE_DIR, 'dashboard', 'app.py')],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        text=True
+        text=True,
+        cwd=BASE_DIR,
     )
     return proc
 

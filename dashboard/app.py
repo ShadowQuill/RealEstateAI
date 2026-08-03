@@ -14,6 +14,7 @@ from sqlalchemy import create_engine, text
 import json
 from datetime import datetime
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ---------- 日志 ----------
 LOG_DIR = os.path.join(os.path.dirname(__file__), '..', 'log')
@@ -43,8 +44,41 @@ _DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'realestate.db'
 engine = create_engine(f"sqlite:///{_DB_PATH}")
 
 
+# ---------- 辅助函数：清洗脏layout数据 ----------
+import re as _re
+
+def _clean_layout(raw):
+    """从混合文本中提取纯户型（如 '3室2厅'）"""
+    if not raw or pd.isna(raw):
+        return '3室2厅'
+    m = _re.search(r'(\d+[室房]\d*厅?)', str(raw))
+    return m.group(1) if m else '3室2厅'
+
+def _clean_floor(raw):
+    if not raw or pd.isna(raw):
+        return '中楼层'
+    s = str(raw)
+    if '低' in s: return '低楼层'
+    if '高' in s: return '高楼层'
+    return '中楼层'
+
+# 所有支持的城市列表
+ALL_CITIES = [
+    '北京', '上海', '广州', '深圳',
+    '成都', '重庆', '杭州', '武汉', '天津',
+    '苏州', '南京', '西安', '郑州', '长沙',
+    '合肥', '青岛', '东莞', '佛山', '宁波',
+    '大连', '沈阳', '济南', '昆明', '厦门',
+    '福州', '无锡', '珠海', '哈尔滨', '南宁',
+]
+
+def _build_city_features(city):
+    """生成29个城市的独热编码特征"""
+    return {f'city_{c}': (1.0 if c == city else 0.0) for c in ALL_CITIES}
+
+
 # ---------- 辅助函数：带重试的AI预测API调用 ----------
-def call_api_with_retry(features, max_retries=2, timeout=3):
+def call_api_with_retry(features, max_retries=2, timeout=5):
     """
     调用预测API，支持重试
     """
@@ -79,19 +113,26 @@ app_dash.layout = html.Div([
         html.H1("🏠 全国二手房数据看板（AI预测版）", style={'textAlign': 'center'}),
         dcc.Dropdown(
             id='city-filter',
-            options=[{'label': c, 'value': c} for c in ['北京', '上海', '广州', '深圳']],
+            options=[{'label': c, 'value': c} for c in [
+                '北京', '上海', '广州', '深圳',
+                '成都', '重庆', '杭州', '武汉', '天津',
+                '苏州', '南京', '西安', '郑州', '长沙',
+                '合肥', '青岛', '东莞', '佛山', '宁波',
+                '大连', '沈阳', '济南', '昆明', '厦门',
+                '福州', '无锡', '珠海', '哈尔滨', '南宁',
+            ]],
             value='北京'
         ),
         # 第一行：两个并排图表（散点图 + 历史趋势）
         html.Div([
-            dcc.Graph(id='price-scatter', style={'width': '49%', 'display': 'inline-block'}),
-            dcc.Graph(id='history-trend', style={'width': '49%', 'display': 'inline-block'})
-        ]),
+            dcc.Loading(dcc.Graph(id='price-scatter'), type='circle', style={'flex': '1', 'minWidth': '0'}),
+            dcc.Loading(dcc.Graph(id='history-trend'), type='circle', style={'flex': '1', 'minWidth': '0'}),
+        ], style={'display': 'flex', 'gap': '10px'}),
         # 第二行：两个并排图表（预测对比 + 未来预测）
         html.Div([
-            dcc.Graph(id='prediction-vs-actual', style={'width': '49%', 'display': 'inline-block'}),
-            dcc.Graph(id='future-prediction', style={'width': '49%', 'display': 'inline-block'})
-        ]),
+            dcc.Loading(dcc.Graph(id='prediction-vs-actual'), type='circle', style={'flex': '1', 'minWidth': '0'}),
+            dcc.Loading(dcc.Graph(id='future-prediction'), type='circle', style={'flex': '1', 'minWidth': '0'}),
+        ], style={'display': 'flex', 'gap': '10px'}),
         html.Div(id='status-message', style={'textAlign': 'center', 'color': 'gray'}),
         html.Div(id='status-future', style={'textAlign': 'center', 'color': 'gray'}),
         # 🆕 查看更多按钮
@@ -143,7 +184,7 @@ app_dash.layout = html.Div([
 )
 def update_scatter(city):
     log_debug(f"散点图回调触发，城市={city}")
-    df = pd.read_sql("SELECT * FROM houses", engine)
+    df = pd.read_sql("SELECT area, price, city FROM houses", engine)
     df_filtered = df[df['city'] == city]
     if df_filtered.empty:
         log_debug(f"城市 {city} 无数据")
@@ -174,7 +215,7 @@ def update_history(city):
     return fig
 
 
-# 🔄 修改：回调3 - 预测对比图（增加 year 字段）
+# 🔄 修改：回调3 - 预测对比图（并行API调用 + 减少样本数）
 @app_dash.callback(
     Output('prediction-vs-actual', 'figure'),
     Output('status-message', 'children'),
@@ -190,90 +231,89 @@ def update_prediction(city):
         log_debug(f"城市 {city} 无数据")
         return px.bar(title=f'{city} 暂无数据'), f'⚠️ 城市 {city} 无数据', ''
 
-    layouts = df_city['layout'].dropna().unique()
-    floors = df_city['floor_info'].dropna().unique()
-    log_debug(f"数据库中的户型值: {layouts}")
-    log_debug(f"数据库中的楼层值: {floors}")
+    log_debug(f"数据库中的户型值: {df_city['layout'].dropna().unique()}")
+    log_debug(f"数据库中的楼层值: {df_city['floor_info'].dropna().unique()}")
 
-    df_sample = df_city.sample(min(10, len(df_city))).copy()
-    predictions = []
-    api_ok = True
-    error_msg = ""
+    # 减少样本数：从10条改为5条，大幅减少API调用时间
+    N_SAMPLE = 5
+    df_sample = df_city.sample(min(N_SAMPLE, len(df_city))).copy()
 
     # 映射表
     layout_map = {
-        '2室1厅': '2室1厅',
-        '2室2厅': '2室1厅',
-        '3室1厅': '3室1厅',
-        '3室2厅': '3室2厅',
-        '3室3厅': '3室2厅',
-        '4室2厅': '3室2厅',
+        '2室0厅': '2室1厅', '2室1厅': '2室1厅', '2室2厅': '2室1厅',
+        '3室1厅': '3室1厅', '3室2厅': '3室2厅', '3室3厅': '3室2厅',
+        '1室0厅': '2室1厅', '1室1厅': '2室1厅', '1室2厅': '2室1厅',
+        '4室1厅': '3室2厅', '4室2厅': '3室2厅', '5室2厅': '3室2厅',
+        '6室2厅': '3室2厅', '0室0厅': '3室2厅',
     }
     floor_map = {
-        '低楼层': '低楼层',
-        '低层': '低楼层',
-        '中楼层': '中楼层',
-        '中层': '中楼层',
-        '高楼层': '高楼层',
-        '高层': '高楼层',
+        '低楼层': '低楼层', '低层': '低楼层',
+        '中楼层': '中楼层', '中层': '中楼层',
+        '高楼层': '高楼层', '高层': '高楼层',
     }
 
+    # 先构建所有特征字典（不调用API）
+    feature_dicts = []
     for idx, row in df_sample.iterrows():
-        log_debug(f"--- 处理第 {idx} 条数据 ---")
-
-        # ---- 清洗数值 ----
         area_val = row['area']
         if pd.isnull(area_val) or area_val <= 0:
             area_val = 80.0
-            log_debug(f"  面积无效，设为80")
 
         year_val = row['building_year']
         current_year = datetime.now().year
         if pd.isnull(year_val) or not (1900 <= year_val < current_year):
             year_val = 2000
-            log_debug(f"  建成年份无效，设为2000")
 
-        # 🔄 新增：提取交易年份（用于预测）
         trade_year = int(row['year']) if 'year' in row and pd.notnull(row['year']) else 2020
-        log_debug(f"  交易年份: {trade_year}")
 
-        # ---- 清洗分类 ----
         layout_raw = str(row.get('layout', '')).strip()
         floor_raw = str(row.get('floor_info', '')).strip()
-        layout_std = layout_map.get(layout_raw, '3室2厅')
-        floor_std = floor_map.get(floor_raw, '中楼层')
-        log_debug(f"  layout: '{layout_raw}' -> '{layout_std}', floor: '{floor_raw}' -> '{floor_std}'")
+        layout_clean = _clean_layout(layout_raw)
+        floor_clean = _clean_floor(floor_raw)
+        layout_std = layout_map.get(layout_clean, '3室2厅')
+        floor_std = floor_map.get(floor_clean, '中楼层')
 
-        # ---- 构造特征（修复版：增加 year 和 city） ----
         features = {
-            'year': trade_year,  # 🔥 必须传年份
+            'year': trade_year,
             'area': float(area_val),
             'building_year': int(year_val),
-            # 🔥 必须传城市（根据当前选中的 city 决定）
-            'city_北京': 1.0 if city == '北京' else 0.0,
-            'city_上海': 1.0 if city == '上海' else 0.0,
-            'city_广州': 1.0 if city == '广州' else 0.0,
-            'city_深圳': 1.0 if city == '深圳' else 0.0,
+        }
+        features.update(_build_city_features(city))
+        features.update({
             'layout_2室1厅': 1.0 if layout_std == '2室1厅' else 0.0,
             'layout_3室1厅': 1.0 if layout_std == '3室1厅' else 0.0,
             'layout_3室2厅': 1.0 if layout_std == '3室2厅' else 0.0,
             'floor_info_低楼层': 1.0 if floor_std == '低楼层' else 0.0,
             'floor_info_中楼层': 1.0 if floor_std == '中楼层' else 0.0,
             'floor_info_高楼层': 1.0 if floor_std == '高楼层' else 0.0,
+        })
+        feature_dicts.append(features)
+
+    # 并行调用API（ThreadPoolExecutor），大幅减少总耗时
+    actual_prices = list(df_sample['price'])
+    predictions = actual_prices[:]  # 默认使用实际价格
+    api_ok = True
+    error_msg = ""
+
+    log_debug(f"  开始并行调用 API（共 {len(feature_dicts)} 条）...")
+    with ThreadPoolExecutor(max_workers=N_SAMPLE) as executor:
+        future_to_i = {
+            executor.submit(call_api_with_retry, feat, 1, 2): i
+            for i, feat in enumerate(feature_dicts)
         }
-
-        log_debug(f"  发送 features: {json.dumps(features, ensure_ascii=False)}")
-
-        # ---- 调用API（带重试） ----
-        pred, err = call_api_with_retry(features, max_retries=2, timeout=3)
-        if pred is not None:
-            log_debug(f"  预测成功，结果 {pred}")
-            predictions.append(pred)
-        else:
-            log_debug(f"  ❌ 预测失败: {err}")
-            predictions.append(row['price'])
-            api_ok = False
-            error_msg += '\n' + err
+        for future in as_completed(future_to_i, timeout=20):
+            i = future_to_i[future]
+            try:
+                pred, err = future.result(timeout=10)
+                if pred is not None:
+                    predictions[i] = pred
+                    log_debug(f"  第{i}条预测成功: {pred}")
+                else:
+                    api_ok = False
+                    error_msg += '\n' + (err or '')
+            except Exception as e:
+                api_ok = False
+                error_msg += '\n' + str(e)
 
     df_sample['predicted'] = predictions
     status = "✅ 所有房源数据预测成功" if api_ok else f"⚠️ 部分房源数据预测失败。{error_msg}"
@@ -283,7 +323,7 @@ def update_prediction(city):
         df_sample,
         x='title',
         y=['price', 'predicted'],
-        title=f'{city} 实际价格 vs AI预测价格（随机10条记录）',
+        title=f'{city} 实际价格 vs AI预测价格（随机{N_SAMPLE}条记录）',
         labels={'value': '万元', 'title': '房源', 'variable': '类型'},
         barmode='group'
     )
@@ -291,7 +331,7 @@ def update_prediction(city):
     return fig, status, city
 
 
-# 🆕 新增：回调4 - 未来3年预测曲线
+# 🆕 新增：回调4 - 未来3年预测曲线（并行API调用）
 @app_dash.callback(
     Output('future-prediction', 'figure'),
     Output('status-future', 'children'),
@@ -300,7 +340,6 @@ def update_prediction(city):
 def update_future(city):
     log_debug(f"========== 未来预测回调触发，城市={city} ==========")
 
-    # 取该城市最新一条记录作为参考样本
     df = pd.read_sql(text("SELECT * FROM houses WHERE city=:city ORDER BY year DESC LIMIT 1"), engine, params={"city": city})
     if df.empty:
         log_debug(f"城市 {city} 无样本")
@@ -308,81 +347,89 @@ def update_future(city):
 
     sample = df.iloc[0]
     current_year = datetime.now().year
-    future_years = [current_year + i for i in range(1, 4)]  # 未来3年(+1,2,3)
+    future_years = [current_year + i for i in range(1, 4)]  # 未来3年
 
-    # ---- 清洗数值 ----
     area_val = sample['area']
     if pd.isnull(area_val) or area_val <= 0:
         area_val = 80.0
-        log_debug(f"  面积无效，设为80")
 
     year_val = sample['building_year']
     if pd.isnull(year_val) or not (1900 <= year_val < current_year):
         year_val = 2000
-        log_debug(f"  建成年份无效，设为2000")
 
-    # ---- 清洗分类（映射归一化） ----
     layout_map = {
-        '2室1厅': '2室1厅',
-        '2室2厅': '2室1厅',
-        '3室1厅': '3室1厅',
-        '3室2厅': '3室2厅',
-        '3室3厅': '3室2厅',
-        '4室2厅': '3室2厅',
+        '2室0厅': '2室1厅', '2室1厅': '2室1厅', '2室2厅': '2室1厅',
+        '3室1厅': '3室1厅', '3室2厅': '3室2厅', '3室3厅': '3室2厅',
+        '1室0厅': '2室1厅', '1室1厅': '2室1厅', '1室2厅': '2室1厅',
+        '4室1厅': '3室2厅', '4室2厅': '3室2厅', '5室2厅': '3室2厅',
+        '6室2厅': '3室2厅', '0室0厅': '3室2厅',
     }
     floor_map = {
-        '低楼层': '低楼层',
-        '低层': '低楼层',
-        '中楼层': '中楼层',
-        '中层': '中楼层',
-        '高楼层': '高楼层',
-        '高层': '高楼层',
+        '低楼层': '低楼层', '低层': '低楼层',
+        '中楼层': '中楼层', '中层': '中楼层',
+        '高楼层': '高楼层', '高层': '高楼层',
     }
     layout_raw = str(sample.get('layout', '')).strip()
     floor_raw = str(sample.get('floor_info', '')).strip()
-    layout_std = layout_map.get(layout_raw, '3室2厅')
-    floor_std = floor_map.get(floor_raw, '中楼层')
+    layout_clean = _clean_layout(layout_raw)
+    floor_clean = _clean_floor(floor_raw)
+    layout_std = layout_map.get(layout_clean, '3室2厅')
+    floor_std = floor_map.get(floor_clean, '中楼层')
 
-    log_debug(f"参考样本年份: {sample['year']}, 面积: {area_val}, 户型: '{layout_raw}' -> '{layout_std}', 楼层: '{floor_raw}' -> '{floor_std}'")
+    log_debug(f"参考样本: 年份={sample['year']}, 面积={area_val}, 户型={layout_std}, 楼层={floor_std}")
 
-    predictions = []
-    pred_years = []
-    api_ok = True
-    error_msg = ""
-
+    # 构建所有未来年份的特征
+    year_features = {}
     for yr in future_years:
-        # 构造特征（使用归一化后的样本特征，只改变年份）
         features = {
-            'year': yr,  # 核心：传入未来年份
+            'year': yr,
             'area': float(area_val),
             'building_year': int(year_val),
-            'city_北京': 1 if city == '北京' else 0,
-            'city_上海': 1 if city == '上海' else 0,
-            'city_广州': 1 if city == '广州' else 0,
-            'city_深圳': 1 if city == '深圳' else 0,
+        }
+        features.update(_build_city_features(city))
+        features.update({
             'layout_2室1厅': 1 if layout_std == '2室1厅' else 0,
             'layout_3室1厅': 1 if layout_std == '3室1厅' else 0,
             'layout_3室2厅': 1 if layout_std == '3室2厅' else 0,
             'floor_info_低楼层': 1 if floor_std == '低楼层' else 0,
             'floor_info_中楼层': 1 if floor_std == '中楼层' else 0,
             'floor_info_高楼层': 1 if floor_std == '高楼层' else 0,
+        })
+        year_features[yr] = features
+
+    # 并行调用API预测所有年份
+    predictions = {}
+    api_ok = True
+    error_msg = ""
+
+    log_debug(f"  开始并行预测未来{len(future_years)}年...")
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        future_to_year = {
+            executor.submit(call_api_with_retry, feat, 1, 2): yr
+            for yr, feat in year_features.items()
         }
+        for future in as_completed(future_to_year, timeout=10):
+            yr = future_to_year[future]
+            try:
+                pred, err = future.result(timeout=5)
+                if pred is not None:
+                    predictions[yr] = pred
+                    log_debug(f"  {yr}年预测: {pred}")
+                else:
+                    api_ok = False
+                    error_msg += '\n' + (err or '')
+            except Exception as e:
+                api_ok = False
+                error_msg += '\n' + str(e)
 
-        log_debug(f"预测 {yr} 年，特征: {json.dumps(features, ensure_ascii=False)}")
-        pred, err = call_api_with_retry(features, max_retries=2, timeout=3)
-        if pred is not None:
-            predictions.append(pred)
-            pred_years.append(yr)
-            log_debug(f"  {yr}年预测成功: {pred}")
-        else:
-            log_debug(f"  {yr}年预测失败: {err}")
-            api_ok = False
-            error_msg += '\n' + err
+    # 按年份排序
+    pred_years = sorted(predictions.keys())
+    pred_values = [predictions[yr] for yr in pred_years]
 
-    if not predictions:
-        return px.scatter(title='未来预测失败（API未响应）'), f'❌ 未来预测失败（API未响应）'
+    if not pred_values:
+        return px.scatter(title='未来预测失败（API未响应）'), '❌ 未来预测失败（API未响应）'
 
-    df_future = pd.DataFrame({'year': pred_years, 'pred_price': predictions})
+    df_future = pd.DataFrame({'year': pred_years, 'pred_price': pred_values})
     fig = px.line(df_future, x='year', y='pred_price', markers=True,
                   title=f'{city} 未来3年价格预测（基于 {sample["year"]} 年样本）',
                   labels={'year': '年份', 'pred_price': '预测总价(万元)'})
@@ -507,4 +554,5 @@ def update_detail_table(city, layout_val, floor_val, sort_val):
 if __name__ == '__main__':
     d_host = os.environ.get('DASHBOARD_HOST', '127.0.0.1')
     d_port = int(os.environ.get('DASHBOARD_PORT', '8050'))
-    app_dash.run(debug=True, host=d_host, port=d_port)
+    # debug=False 避免 Flask reloader 导致的回调卡死问题
+    app_dash.run(debug=False, host=d_host, port=d_port)

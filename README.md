@@ -9,7 +9,7 @@
 | **房价预测** | 输入房屋特征（面积、年份、城市、户型、楼层），预测二手房总价 |
 | **文本分析** | 从房产文本中自动提取成交价格，检测虚假宣传风险 |
 | **数据可视化** | 交互式看板展示房价趋势、城市对比等分析结果 |
-| **数据采集** | 链家房产数据爬虫，自动抓取房源信息 |
+| **数据采集** | 链家二手房真实数据爬虫，自动抓取线上房源信息 |
 
 ## 🛠️ 技术栈
 
@@ -27,7 +27,8 @@
 
 ```
 RealEstateAI/
-├── run_system.py              # 一键启动入口
+├── run_system.py              # 一键启动入口（API + 看板）
+├── run_update.py              # 一键数据更新（爬取 + 训练）
 ├── requirements.txt           # 依赖清单
 ├── .env                       # 环境配置（API地址、端口等，不提交到仓库）
 │
@@ -38,7 +39,7 @@ RealEstateAI/
 │   └── app.py                 #   Dash看板
 │
 ├── scrapers/                  # 数据爬虫
-│   └── lianjia_spider.py      #   链家爬虫
+│   └── lianjia_spider.py      #   链家二手房爬虫（行政区模式）
 │
 ├── data_pipeline/             # 数据处理
 │   └── feature_engineering.py #   特征工程
@@ -81,11 +82,11 @@ pip install -r requirements.txt
 
 ```ini
 # API 服务配置
-API_BASE_URL=http://127.0.0.1:8000
 API_HOST=127.0.0.1
 API_PORT=8000
 
 # 看板配置
+DASHBOARD_HOST=127.0.0.1
 DASHBOARD_PORT=8050
 ```
 
@@ -102,7 +103,19 @@ python api/main.py          # 启动API服务
 python dashboard/app.py     # 启动可视化看板
 ```
 
-### 4. 访问服务
+### 4. 数据更新
+
+```bash
+# 一键数据更新：清空旧数据 → 爬取链家真实数据 → 重新训练模型
+python run_update.py
+
+# 或单独运行爬虫
+python scrapers/lianjia_spider.py
+```
+
+> 爬虫按行政区爬取北京、上海、广州、深圳四个城市（共41个区），每区第1页（独立URL，不触发反爬），每页约30条，可获取120+条真实房源数据。
+
+### 5. 访问服务
 
 | 服务 | 地址 |
 |------|------|
@@ -169,11 +182,11 @@ python dashboard/app.py     # 启动可视化看板
 ## 📊 数据流程
 
 ```
-链家爬虫 → SQLite数据库 → 特征工程 → 模型训练 → API服务
-                                    ↓
-                              独热编码
-                              数据标准化
-                              特征列保存
+链家网真实数据 → SQLite数据库 → 特征工程 → 模型训练 → API服务
+                                      ↓
+                                独热编码
+                                数据标准化
+                                特征列保存
 ```
 
 ## 📝 依赖说明

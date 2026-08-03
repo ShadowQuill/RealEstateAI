@@ -2,6 +2,7 @@
 RealEstateAI/
 │
 ├── run_system.py              # 系统启动入口（一键启动API+看板）
+├── run_update.py              # 一键数据更新（爬取→训练）
 ├── requirements.txt           # 项目依赖清单
 ├── .env                       # 环境配置（API地址、端口等，不提交到仓库）
 ├── menu.txt                   # 本文件：项目目录说明
@@ -13,7 +14,7 @@ RealEstateAI/
 │   └── app.py                 #   - Dash看板主程序
 │
 ├── scrapers/                  # 数据爬虫
-│   └── lianjia_spider.py      #   - 链家房产数据爬虫
+│   └── lianjia_spider.py      #   - 链家二手房真实数据爬虫
 │
 ├── data_pipeline/             # 数据处理流水线
 │   └── feature_engineering.py #   - 特征工程（数据清洗、独热编码、标准化）
@@ -41,13 +42,15 @@ RealEstateAI/
 │
 └── .venv/                     # Python虚拟环境
 
-// 启动方式
-// 1. 一键启动：python run_system.py
-// 2. 单独启动API：python api/main.py
-// 3. 单独启动看板：python dashboard/app.py
-// 4. 训练模型：python models/train.py
+# 启动方式
+# 1. 一键启动：python run_system.py
+# 2. 单独启动API：python api/main.py
+# 3. 单独启动看板：python dashboard/app.py
+# 4. 训练模型：python models/train.py
+# 5. 一键数据更新（爬取+训练）：python run_update.py
+# 6. 单独运行爬虫：python scrapers/lianjia_spider.py
 
-// 访问地址（默认值，可在 .env 中修改）
-// API接口文档：http://127.0.0.1:8000/docs
-// 健康检查：http://127.0.0.1:8000/health
-// 可视化看板：http://127.0.0.1:8050
+# 访问地址（默认值，可在 .env 中修改）
+# API接口文档：http://127.0.0.1:8000/docs
+# 健康检查：http://127.0.0.1:8000/health
+# 可视化看板：http://127.0.0.1:8050

@@ -8,10 +8,9 @@ requests==2.31.0
 beautifulsoup4==4.12.2
 lxml==4.9.3
 
-# 机器学习（ARM64 适配版）
+# 机器学习
 scikit-learn==1.3.0
 xgboost==1.7.6
-lightgbm==4.5.0
 
 # NLP
 transformers==4.31.0

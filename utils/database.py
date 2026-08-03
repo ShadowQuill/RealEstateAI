@@ -11,9 +11,6 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 DB_PATH = os.path.join(DATA_DIR, "realestate.db")
 
-# 打印最终使用的路径，方便调试
-print(f"🔍 数据库路径: {DB_PATH}")
-
 # 注意：绝对路径使用三个斜杠即可（因为路径以 / 开头）
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 

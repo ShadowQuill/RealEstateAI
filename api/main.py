@@ -42,10 +42,39 @@ class HouseInput(BaseModel):
     year: int = Field(2026, description="交易年份（支持未来5年）")
     area: float = Field(80.0, description="面积")
     building_year: int = Field(2010, description="建成年份")
+    # 一线城市
     city_北京: int = Field(0)
     city_上海: int = Field(0)
     city_广州: int = Field(0)
     city_深圳: int = Field(0)
+    # 新一线城市
+    city_成都: int = Field(0)
+    city_重庆: int = Field(0)
+    city_杭州: int = Field(0)
+    city_武汉: int = Field(0)
+    city_天津: int = Field(0)
+    city_苏州: int = Field(0)
+    city_南京: int = Field(0)
+    city_西安: int = Field(0)
+    city_郑州: int = Field(0)
+    city_长沙: int = Field(0)
+    city_合肥: int = Field(0)
+    city_青岛: int = Field(0)
+    city_东莞: int = Field(0)
+    city_佛山: int = Field(0)
+    city_宁波: int = Field(0)
+    # 重要二线城市
+    city_大连: int = Field(0)
+    city_沈阳: int = Field(0)
+    city_济南: int = Field(0)
+    city_昆明: int = Field(0)
+    city_厦门: int = Field(0)
+    city_福州: int = Field(0)
+    city_无锡: int = Field(0)
+    city_珠海: int = Field(0)
+    city_哈尔滨: int = Field(0)
+    city_南宁: int = Field(0)
+    # 户型 & 楼层
     layout_2室1厅: int = Field(0)
     layout_3室1厅: int = Field(0)
     layout_3室2厅: int = Field(0)
@@ -68,8 +97,9 @@ class HouseInput(BaseModel):
         if not (1900 <= self.building_year < self.year):
             raise ValueError(f"建成年份必须<{self.year}且>=1900")
 
-        # 城市、户型、楼层互斥检查
-        city_sum = sum(getattr(self, f) for f in ['city_北京','city_上海','city_广州','city_深圳'])
+        # 城市互斥检查（动态获取所有city_开头的字段）
+        city_fields = [f for f in self.model_fields if f.startswith('city_')]
+        city_sum = sum(getattr(self, f) for f in city_fields)
         if city_sum != 1:
             raise ValueError("必须且只能选择一个城市")
         layout_sum = sum(getattr(self, f) for f in ['layout_2室1厅','layout_3室1厅','layout_3室2厅'])
@@ -112,7 +142,7 @@ def predict_price(house: HouseInput):
 
         return {"predicted_price": round(final_pred, 2), "unit": "万元"}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post(
