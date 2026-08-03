@@ -1,56 +1,119 @@
 // 项目目录结构
 RealEstateAI/
 │
-├── run_system.py              # 系统启动入口（一键启动API+看板）
-├── run_update.py              # 一键数据更新（爬取→训练）
-├── requirements.txt           # 项目依赖清单
+├── run_system.py              # 系统启动入口（一键启动API+看板+前端）
+├── run_update.py              # 一键数据更新（爬取→训练→历史数据）
+├── requirements.txt           # Python 项目依赖清单
 ├── .env                       # 环境配置（API地址、端口等，不提交到仓库）
 ├── menu.txt                   # 本文件：项目目录说明
+├── README.md                  # 项目说明文档
 │
 ├── api/                       # FastAPI 后端接口
-│   └── main.py                #   - API主程序（房价预测、文本分析接口）
+│   └── main.py                #   - API主程序（房源查询、趋势预测、NLP文本分析）
 │
-├── dashboard/                 # 可视化看板
+├── frontend/                  # React 前端应用（TypeScript + Vite + Tailwind + shadcn/ui）
+│   ├── package.json           #   - Node.js 依赖配置
+│   ├── src/
+│   │   ├── App.tsx            #   - 主应用（路由配置）
+│   │   ├── main.tsx           #   - 入口文件
+│   │   ├── index.css          #   - 全局样式（深色主题 + shadcn/ui）
+│   │   ├── components/
+│   │   │   └── Navbar.tsx     #   - 顶部导航栏
+│   │   ├── sections/
+│   │   │   ├── DashboardPage.tsx     # - 数据仪表盘（总览、城市排行、散点图）
+│   │   │   ├── CityListingsPage.tsx  # - 城市房源列表（分页、排序、筛选）
+│   │   │   ├── ListingDetailPage.tsx # - 房源详情 + 趋势预测
+│   │   │   └── NLPAnalysisPage.tsx   # - NLP文本分析页面
+│   │   ├── types/
+│   │   │   └── api.ts         #   - TypeScript 类型定义 + API 封装
+│   │   └── lib/
+│   │       ├── utils.ts       #   - shadcn/ui 工具函数
+│   │       └── format.ts      #   - 格式化工具函数
+│   └── dist/                  #   - 生产构建产物
+│
+├── dashboard/                 # Plotly Dash 可视化看板（传统版）
 │   └── app.py                 #   - Dash看板主程序
 │
 ├── scrapers/                  # 数据爬虫
-│   └── lianjia_spider.py      #   - 链家二手房真实数据爬虫
+│   └── lianjia_spider.py      #   - 链家 + 贝壳二手房爬虫（多城市、多平台）
 │
 ├── data_pipeline/             # 数据处理流水线
 │   └── feature_engineering.py #   - 特征工程（数据清洗、独热编码、标准化）
 │
 ├── models/                    # 机器学习模型
-│   ├── train.py               #   - 模型训练脚本
+│   ├── train.py               #   - 房价预测模型训练（XGBoost + RF + Blending）
+│   ├── trend_predictor.py     #   - 趋势预测模型（线性回归 + 多项式拟合）
 │   ├── xgb_model.pkl          #   - XGBoost模型文件
 │   ├── rf_model.pkl           #   - 随机森林模型文件
 │   ├── blend_model.pkl        #   - 融合模型文件
+│   ├── trend_model.pkl        #   - 趋势预测模型文件
 │   ├── scaler.pkl             #   - 数据标准化器
 │   └── feature_cols.pkl       #   - 特征列名列表
 │
 ├── nlp_module/                # NLP自然语言处理模块
-│   └── ai_analyzer.py         #   - AI分析器（提取价格、检测虚假宣传）
+│   └── ai_analyzer.py         #   - AI分析器（价格提取、虚假宣传检测、情感分析、区域识别）
 │
 ├── utils/                     # 工具函数
-│   └── database.py            #   - 数据库配置与ORM模型
+│   └── database.py            #   - 数据库配置、ORM模型、表迁移
 │
-├── data/                      # 数据存放目录（SQLite数据库）
+├── data/                      # 数据存放目录
+│   └── realestate.db          #   - SQLite 数据库文件
 │
 ├── log/                       # 日志目录
 │   └── dashboard_debug.log    #   - 看板调试日志
 │
-├── cache/                     # NLP模型缓存（HuggingFace sentence-transformers）
-│
-└── .venv/                     # Python虚拟环境
+└── cache/                     # NLP模型缓存（HuggingFace sentence-transformers）
 
+
+# ============================================================
 # 启动方式
-# 1. 一键启动：python run_system.py
-# 2. 单独启动API：python api/main.py
-# 3. 单独启动看板：python dashboard/app.py
-# 4. 训练模型：python models/train.py
-# 5. 一键数据更新（爬取+训练）：python run_update.py
-# 6. 单独运行爬虫：python scrapers/lianjia_spider.py
+# ============================================================
 
-# 访问地址（默认值，可在 .env 中修改）
-# API接口文档：http://127.0.0.1:8000/docs
-# 健康检查：http://127.0.0.1:8000/health
-# 可视化看板：http://127.0.0.1:8050
+# 步骤 0：安装依赖（仅首次）
+#   Python 后端：
+#     pip install -r requirements.txt
+#   React 前端：
+#     cd frontend && npm install
+
+# 步骤 1：初始化数据（仅首次，或需要更新数据时）
+#   python run_update.py
+#   （爬取链家真实数据 → 生成历史趋势 → 训练价格预测模型 → 训练趋势预测模型）
+
+# 步骤 2a：一键启动后端（API + Dash看板）
+#   python run_system.py
+
+# 步骤 2b：启动前端开发服务器（新终端）
+#   cd frontend && npm run dev
+
+# 步骤 3：访问服务
+#   前端主页：http://localhost:5173
+#   API接口文档：http://127.0.0.1:8000/docs
+#   健康检查：http://127.0.0.1:8000/health
+#   Dash看板：http://127.0.0.1:8050
+
+
+# ============================================================
+# 单独启动命令
+# ============================================================
+#   API 服务：        python api/main.py
+#   Dash 看板：       python dashboard/app.py
+#   前端开发服务器：   cd frontend && npm run dev
+#   前端生产构建：     cd frontend && npm run build
+#   爬虫单独运行：     python scrapers/lianjia_spider.py
+#   模型训练：         python models/train.py
+
+
+# ============================================================
+# API 接口列表
+# ============================================================
+#   GET  /health                       健康检查
+#   GET  /api/cities                   获取所有城市及统计
+#   GET  /api/cities/{city}/listings   城市房源列表（分页、排序、筛选）
+#   GET  /api/cities/{city}/stats      城市统计数据（价格、区域、户型分布）
+#   GET  /api/listings/{id}            房源详情
+#   GET  /api/predict/city_trend/{city} 城市趋势预测
+#   POST /api/predict/listing_future   房源未来价格预测
+#   POST /api/analyze/text             NLP文本分析
+#   POST /api/analyze/listing/{id}     房源描述分析
+#   GET  /api/dashboard/overview       仪表盘总览
+#   GET  /api/dashboard/yearly_trend    年度趋势数据

@@ -1,6 +1,6 @@
 # run_update.py
 """
-一键更新脚本：清空旧数据 → 重新爬取 → 重新训练模型
+一键更新脚本：清空旧数据 → 重新爬取 → 重新训练价格预测模型 → 训练趋势预测模型
 用法：python run_update.py
 """
 import sys
@@ -11,13 +11,12 @@ import random
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(BASE_DIR)
 
-from utils.database import SessionLocal, House, init_db
+from utils.database import SessionLocal, House, init_db, migrate_db
 from scrapers.lianjia_spider import parse_listing_page, save_to_db, generate_historical_data, CITY_URL_MAP, DATA_SOURCES
 from models.train import train
 
 
 def clear_old_data():
-    """清空数据库中已有的房源数据"""
     db = SessionLocal()
     try:
         count = db.query(House).count()
@@ -35,12 +34,10 @@ def clear_old_data():
 
 
 def run_spider():
-    """运行爬虫，从链家和贝壳两个平台抓取真实房源数据"""
     cities = list(CITY_URL_MAP.keys())
     print("\n" + "=" * 50)
     print("📡 第一步：从链家 + 贝壳爬取真实房源数据")
     print(f"🏙️  共 {len(cities)} 个城市，2 个平台")
-    print(f"📊 预估数据量: {len(cities)} × 2 × 30 ≈ {len(cities)*2*30} 条")
     print("=" * 50)
 
     total = 0
@@ -57,41 +54,62 @@ def run_spider():
                 saved = save_to_db(houses)
                 total += saved
                 print(f" [{len(houses)}条]")
-            # 随机延迟，避免被封
             time.sleep(random.uniform(2.0, 5.0))
 
     print(f"\n🎉 爬取完成，共写入 {total} 条真实房源数据")
 
 
-def retrain_model():
-    """重新训练模型"""
+def retrain_price_model():
     print("\n" + "=" * 50)
-    print("🧠 第二步：重新训练模型")
+    print("🧠 第二步：重新训练价格预测模型")
     print("=" * 50)
     train()
+
+
+def retrain_trend_model():
+    print("\n" + "=" * 50)
+    print("📈 第三步：训练趋势预测模型")
+    print("=" * 50)
+    try:
+        from models.trend_predictor import TrendPredictor
+        predictor = TrendPredictor()
+        results = predictor.fit_all_cities()
+        for city, res in results.items():
+            print(f"  ✅ {city}: {res['historical_years']}年数据, R²={res['r2_score']:.4f}")
+        predictor.save_model()
+        print(f"✅ 趋势预测模型训练完成，共 {len(results)} 个城市")
+    except Exception as e:
+        print(f"❌ 趋势预测模型训练失败: {e}")
 
 
 if __name__ == "__main__":
     print("🔄 开始执行数据更新流程...\n")
 
-    # 1. 初始化数据库（确保表结构存在）
+    # 0. 初始化/迁移数据库
     init_db()
+    migrate_db()
 
-    # 2. 清空旧数据
+    # 1. 清空旧数据
     clear_old_data()
 
-    # 3. 重新爬取数据
+    # 2. 重新爬取数据
     run_spider()
 
-    # 3.5. 生成历史数据（关键：让模型能学到年份趋势，历史图有多个数据点）
+    # 2.5. 生成历史数据
     print("\n" + "=" * 50)
     print("📊 第1.5步：生成历史数据（2022-2025）")
     print("=" * 50)
     generate_historical_data()
 
-    # 4. 重新训练模型
-    retrain_model()
+    # 3. 价格预测模型
+    retrain_price_model()
+
+    # 4. 趋势预测模型
+    retrain_trend_model()
 
     print("\n" + "=" * 50)
     print("✅ 全部流程执行完毕！数据库和模型均已更新。")
     print("=" * 50)
+    print("\n📱 启动系统:")
+    print("   后端: python run_system.py")
+    print("   前端: cd frontend && npm run dev")

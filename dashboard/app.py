@@ -82,7 +82,7 @@ def call_api_with_retry(features, max_retries=2, timeout=5):
     """
     调用预测API，支持重试
     """
-    url = f'{API_BASE_URL}/predict'
+    url = f'{API_BASE_URL}/api/predict/price'
     for attempt in range(max_retries + 1):
         try:
             resp = requests.post(url, json=features, timeout=timeout)
@@ -349,91 +349,51 @@ def update_future(city):
     current_year = datetime.now().year
     future_years = [current_year + i for i in range(1, 4)]  # 未来3年
 
-    area_val = sample['area']
-    if pd.isnull(area_val) or area_val <= 0:
-        area_val = 80.0
+    # 基准价格：用当前样本房源的总价，作为未来预测的起始点
+    base_price = sample['price']
+    if pd.isnull(base_price) or base_price <= 0:
+        base_price = 100.0
+    log_debug(f"参考样本: 年份={sample['year']}, 当前总价={base_price} 万元")
 
-    year_val = sample['building_year']
-    if pd.isnull(year_val) or not (1900 <= year_val < current_year):
-        year_val = 2000
+    # 改用城市趋势接口（polynomial regression）获取未来每年的年增长率，
+    # 再用年增长率复合到当前房源价格上 —— 避免静态估价模型导致各年数值相同
+    try:
+        resp = requests.get(
+            f'{API_BASE_URL}/api/predict/city_trend/{city}',
+            params={'future_years': 3},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return px.scatter(title='趋势预测失败'), f'❌ 趋势预测失败: API {resp.status_code}'
+        trend = resp.json()
+    except Exception as e:
+        return px.scatter(title='趋势预测失败'), f'❌ 趋势预测失败: {e}'
 
-    layout_map = {
-        '2室0厅': '2室1厅', '2室1厅': '2室1厅', '2室2厅': '2室1厅',
-        '3室1厅': '3室1厅', '3室2厅': '3室2厅', '3室3厅': '3室2厅',
-        '1室0厅': '2室1厅', '1室1厅': '2室1厅', '1室2厅': '2室1厅',
-        '4室1厅': '3室2厅', '4室2厅': '3室2厅', '5室2厅': '3室2厅',
-        '6室2厅': '3室2厅', '0室0厅': '3室2厅',
-    }
-    floor_map = {
-        '低楼层': '低楼层', '低层': '低楼层',
-        '中楼层': '中楼层', '中层': '中楼层',
-        '高楼层': '高楼层', '高层': '高楼层',
-    }
-    layout_raw = str(sample.get('layout', '')).strip()
-    floor_raw = str(sample.get('floor_info', '')).strip()
-    layout_clean = _clean_layout(layout_raw)
-    floor_clean = _clean_floor(floor_raw)
-    layout_std = layout_map.get(layout_clean, '3室2厅')
-    floor_std = floor_map.get(floor_clean, '中楼层')
+    trend_preds = {p['year']: p for p in trend.get('predictions', [])}
+    if not trend_preds:
+        return px.scatter(title='趋势无数据'), '⚠️ 该城市趋势数据不足'
 
-    log_debug(f"参考样本: 年份={sample['year']}, 面积={area_val}, 户型={layout_std}, 楼层={floor_std}")
-
-    # 构建所有未来年份的特征
-    year_features = {}
+    # 用城市年增长率递推房源未来价格
+    running_price = float(base_price)
+    pred_years, pred_values = [], []
     for yr in future_years:
-        features = {
-            'year': yr,
-            'area': float(area_val),
-            'building_year': int(year_val),
-        }
-        features.update(_build_city_features(city))
-        features.update({
-            'layout_2室1厅': 1 if layout_std == '2室1厅' else 0,
-            'layout_3室1厅': 1 if layout_std == '3室1厅' else 0,
-            'layout_3室2厅': 1 if layout_std == '3室2厅' else 0,
-            'floor_info_低楼层': 1 if floor_std == '低楼层' else 0,
-            'floor_info_中楼层': 1 if floor_std == '中楼层' else 0,
-            'floor_info_高楼层': 1 if floor_std == '高楼层' else 0,
-        })
-        year_features[yr] = features
-
-    # 并行调用API预测所有年份
-    predictions = {}
-    api_ok = True
-    error_msg = ""
-
-    log_debug(f"  开始并行预测未来{len(future_years)}年...")
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        future_to_year = {
-            executor.submit(call_api_with_retry, feat, 1, 2): yr
-            for yr, feat in year_features.items()
-        }
-        for future in as_completed(future_to_year, timeout=10):
-            yr = future_to_year[future]
-            try:
-                pred, err = future.result(timeout=5)
-                if pred is not None:
-                    predictions[yr] = pred
-                    log_debug(f"  {yr}年预测: {pred}")
-                else:
-                    api_ok = False
-                    error_msg += '\n' + (err or '')
-            except Exception as e:
-                api_ok = False
-                error_msg += '\n' + str(e)
-
-    # 按年份排序
-    pred_years = sorted(predictions.keys())
-    pred_values = [predictions[yr] for yr in pred_years]
+        info = trend_preds.get(yr)
+        if info is None:
+            continue
+        growth = (info.get('yoy_growth') or 0) / 100.0
+        running_price = running_price * (1 + growth)
+        pred_years.append(yr)
+        pred_values.append(round(running_price, 2))
+        log_debug(f"  {yr}年预测: {running_price:.2f} (年增长率 {info.get('yoy_growth')}%)")
 
     if not pred_values:
-        return px.scatter(title='未来预测失败（API未响应）'), '❌ 未来预测失败（API未响应）'
+        return px.scatter(title='未来预测失败'), '❌ 未来预测失败'
 
     df_future = pd.DataFrame({'year': pred_years, 'pred_price': pred_values})
     fig = px.line(df_future, x='year', y='pred_price', markers=True,
-                  title=f'{city} 未来3年价格预测（基于 {sample["year"]} 年样本）',
+                  title=f'{city} 未来3年价格预测（基于趋势 + 当前样本 {base_price} 万元）',
                   labels={'year': '年份', 'pred_price': '预测总价(万元)'})
-    status = "✅ 未来3年预测成功" if api_ok else f"⚠️ 部分年份预测失败。{error_msg}"
+    status = "✅ 未来3年预测成功"
     log_debug(f"========== 未来预测回调结束，状态: {status} ==========\n")
     return fig, status
 

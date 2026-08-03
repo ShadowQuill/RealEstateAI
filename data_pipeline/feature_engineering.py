@@ -58,7 +58,7 @@ def load_and_prepare_data():
         '6室2厅': '3室2厅', '0室0厅': '3室2厅',
     }
 
-    df['layout'] = df['layout'].apply(clean_layout)
+    df['layout'] = df['rooms'].apply(clean_layout)
     df['layout'] = df['layout'].map(lambda x: LAYOUT_MAP.get(x, '3室2厅'))
     df['floor_info'] = df['floor_info'].apply(clean_floor)
 
