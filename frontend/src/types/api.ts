@@ -105,6 +105,8 @@ export interface NLPFeatures {
 
 export interface NLPAnalysis {
   deal_price: number | null;
+  unit_price: number | null;
+  price_reason: string[];
   fraud_risk: NLPFraudRisk;
   regions: string[];
   features: NLPFeatures;

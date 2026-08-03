@@ -129,17 +129,32 @@ export default function NLPAnalysisPage() {
       {/* Results */}
       {analysis && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* 成交价 */}
+          {/* 成交价 / 单价 */}
           <Card className="glow-card border-0">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-sm">
                 <Tag className="w-4 h-4 text-primary" />
-                提取成交价
+                提取成交价与单价
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold text-primary">{formatPrice(analysis.deal_price)}</p>
-              <p className="text-xs text-muted-foreground mt-1">从文本中自动识别</p>
+            <CardContent className="space-y-3">
+              <div>
+                <p className="text-xs text-muted-foreground">成交总价</p>
+                <p className="text-3xl font-bold text-primary">{formatPrice(analysis.deal_price)}</p>
+              </div>
+              <div className="border-t border-border/60 pt-3">
+                <p className="text-xs text-muted-foreground">单价（元/㎡）</p>
+                <p className="text-xl font-semibold">
+                  {analysis.unit_price != null
+                    ? `${analysis.unit_price.toLocaleString()} 元/㎡`
+                    : "未提取到单价"}
+                </p>
+              </div>
+              {analysis.price_reason && analysis.price_reason.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {analysis.price_reason.join("；")}
+                </p>
+              )}
             </CardContent>
           </Card>
 
