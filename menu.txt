@@ -1,119 +1,84 @@
-// 项目目录结构
+项目结构说明（RealEstateAI）
+================================
+
+RealEstateAI 是一个房地产 AI 分析系统，涵盖数据采集、价格预测、趋势预测与 AI 智能分析，
+并配套 Flask 看板与 React 前端，用于可视化城市房价、价格预测分析与自然语言问答。
+
+整体目录布局
+------------
 RealEstateAI/
-│
-├── run_system.py              # 系统启动入口（一键启动API+看板+前端）
-├── run_update.py              # 一键数据更新（爬取→训练→历史数据）
-├── requirements.txt           # Python 项目依赖清单
-├── .env                       # 环境配置（API地址、端口等，不提交到仓库）
-├── menu.txt                   # 本文件：项目目录说明
-├── README.md                  # 项目说明文档
-│
-├── api/                       # FastAPI 后端接口
-│   └── main.py                #   - API主程序（房源查询、趋势预测、NLP文本分析）
-│
-├── frontend/                  # React 前端应用（TypeScript + Vite + Tailwind + shadcn/ui）
-│   ├── package.json           #   - Node.js 依赖配置
-│   ├── src/
-│   │   ├── App.tsx            #   - 主应用（路由配置）
-│   │   ├── main.tsx           #   - 入口文件
-│   │   ├── index.css          #   - 全局样式（深色主题 + shadcn/ui）
-│   │   ├── components/
-│   │   │   └── Navbar.tsx     #   - 顶部导航栏
-│   │   ├── sections/
-│   │   │   ├── DashboardPage.tsx     # - 数据仪表盘（总览、城市排行、散点图）
-│   │   │   ├── CityListingsPage.tsx  # - 城市房源列表（分页、排序、筛选）
-│   │   │   ├── ListingDetailPage.tsx # - 房源详情 + 趋势预测
-│   │   │   └── NLPAnalysisPage.tsx   # - NLP文本分析页面
-│   │   ├── types/
-│   │   │   └── api.ts         #   - TypeScript 类型定义 + API 封装
-│   │   └── lib/
-│   │       ├── utils.ts       #   - shadcn/ui 工具函数
-│   │       └── format.ts      #   - 格式化工具函数
-│   └── dist/                  #   - 生产构建产物
-│
-├── dashboard/                 # Plotly Dash 可视化看板（传统版）
-│   └── app.py                 #   - Dash看板主程序
-│
-├── scrapers/                  # 数据爬虫
-│   └── lianjia_spider.py      #   - 链家 + 贝壳二手房爬虫（多城市、多平台）
-│
+├── api/                       # 后端 API 服务（FastAPI）
+│   ├── main.py                #   应用入口：CORS、路由注册、模型懒加载、静态文件挂载
+│   ├── models.py              #   Pydantic 数据模型（HouseInput 等请求/响应结构）
+│   ├── predictor.py           #   价格预测封装：加载 xgb/rf/blend 模型 + scaler + feature_cols
+│   ├── analysis.py            #   价格区间、数据分布、城市榜单等分析逻辑
+│   └── nlp.py                 #   自然语言分析接口：加载本地大模型、意图识别、RAG 检索
+├── models/                    # 训练好的模型（.pkl）与训练脚本
+│   ├── train.py               #   价格预测模型训练（XGBoost / RandomForest / 加权融合）
+│   ├── trend_predictor.py     #   时间序列趋势预测（多项式回归）训练与预测
+│   ├── xgb_model.pkl          #   训练产物：XGBoost 价格模型
+│   ├── rf_model.pkl           #   训练产物：RandomForest 价格模型
+│   ├── blend_model.pkl        #   训练产物：融合（加权）价格模型
+│   ├── trend_predictor.pkl    #   训练产物：城市趋势预测器
+│   ├── scaler.pkl             #   训练产物：数值特征标准化器
+│   └── feature_cols.pkl       #   训练产物：特征列顺序（与 API 严格一致）
+├── nlp_module/                # 自然语言分析模块
+│   ├── analyzer.py            #   AI 分析器基类（意图识别、数据检索、报告生成）
+│   └── ai_analyzer.py        #   基于本地大模型（GLM-4-9B）的实现，支持 RAG + 示例
 ├── data_pipeline/             # 数据处理流水线
-│   └── feature_engineering.py #   - 特征工程（数据清洗、独热编码、标准化）
-│
-├── models/                    # 机器学习模型
-│   ├── train.py               #   - 房价预测模型训练（XGBoost + RF + Blending）
-│   ├── trend_predictor.py     #   - 趋势预测模型（线性回归 + 多项式拟合）
-│   ├── xgb_model.pkl          #   - XGBoost模型文件
-│   ├── rf_model.pkl           #   - 随机森林模型文件
-│   ├── blend_model.pkl        #   - 融合模型文件
-│   ├── trend_model.pkl        #   - 趋势预测模型文件
-│   ├── scaler.pkl             #   - 数据标准化器
-│   └── feature_cols.pkl       #   - 特征列名列表
-│
-├── nlp_module/                # NLP自然语言处理模块
-│   └── ai_analyzer.py         #   - AI分析器（价格提取、虚假宣传检测、情感分析、区域识别）
-│
-├── utils/                     # 工具函数
-│   └── database.py            #   - 数据库配置、ORM模型、表迁移
-│
-├── data/                      # 数据存放目录
-│   └── realestate.db          #   - SQLite 数据库文件
-│
+│   └── feature_engineering.py #   从数据库抽取房源，清洗/独热编码/标准化，产出训练特征
+├── scrapers/                  # 数据采集
+│   └── lianjia_spider.py      #   链家/贝壳多平台爬虫，真实请求失败自动回退模拟数据
+├── utils/                     # 通用工具
+│   ├── database.py            #   SQLAlchemy 模型 House 表、SQLite 初始化与迁移
+│   ├── constants.py           #   城市列表/户型/楼层单一数据源与清洗逻辑
+│   ├── text_preprocessing.py  #   文本预处理（分词、去噪）
+│   └── data_processor.py      #   数据加工辅助函数
+├── dashboard/                 # 可视化看板（Flask + Plotly）
+│   ├── app.py                 #   看板后端：图表数据接口、页面渲染
+│   ├── static/                #   静态资源（CSS/JS）
+│   └── templates/             #   HTML 模板
+├── frontend/                  # 前端（React + Vite + Ant Design + Tailwind）
+│   ├── src/                   #   源码（页面、组件、API 封装）
+│   ├── dist/                  #   构建产物（已被 API 静态挂载）
+│   └── package.json           #   前端依赖与脚本
+├── data/                      # 运行时数据（SQLite 库、缓存）
+│   └── realestate.db          #   房源数据库（运行爬虫后生成）
+├── cache/                     # 缓存目录（AI 问答 / 分析结果缓存）
 ├── log/                       # 日志目录
-│   └── dashboard_debug.log    #   - 看板调试日志
-│
-└── cache/                     # NLP模型缓存（HuggingFace sentence-transformers）
+├── run_system.py              # 一键启动脚本：API + 看板 + 前端构建/预览
+├── run_update.py              # 数据更新脚本：爬取 + 训练 + 趋势模型
+├── requirements.txt           # Python 依赖清单
+├── .env                       # 运行配置（API/看板端口、HF 镜像源）
+├── README.md                  # 项目说明文档
+└── menu.txt                   # 本文件：项目结构说明
 
+数据流向
+--------
+爬虫 scrapers  ->  数据库 data/realestate.db
+数据库         ->  feature_engineering  ->  train.py / trend_predictor.py  ->  models/*.pkl
+models/*.pkl   ->  api/main.py / predictor.py / nlp.py  ->  dashboard + frontend 展示
 
-# ============================================================
-# 启动方式
-# ============================================================
+城市覆盖
+--------
+内置 30 个城市（北京、上海、广州、深圳、成都、重庆、杭州、武汉、天津、苏州、南京、西安、
+郑州、长沙、合肥、青岛、东莞、佛山、宁波、大连、沈阳、济南、昆明、厦门、福州、无锡、珠海、
+哈尔滨、南宁，以及配置在 utils/constants.py 中的全部城市列表）。
 
-# 步骤 0：安装依赖（仅首次）
-#   Python 后端：
-#     pip install -r requirements.txt
-#   React 前端：
-#     cd frontend && npm install
+主要入口脚本
+------------
+- python run_system.py ：启动完整系统（训练缺失模型时自动训练、拉起 API/看板、构建前端）
+- python run_update.py ：更新房源数据并重新训练价格与趋势模型
 
-# 步骤 1：初始化数据（仅首次，或需要更新数据时）
-#   python run_update.py
-#   （爬取链家真实数据 → 生成历史趋势 → 训练价格预测模型 → 训练趋势预测模型）
+核心 API 接口（FastAPI，默认 http://127.0.0.1:8000）
+---------------------------------------------------
+- GET  /                      : 健康检查 / API 说明
+- GET  /api/cities            : 返回支持的城市列表
+- GET  /api/stats/:city       : 城市统计（房源数、均价、面积分布等）
+- POST /api/predict           : 给定城市+面积+户型等参数，预测单价与总价
+- POST /api/predict/price     : 给定完整特征（含 year/area/house_age 等）直接预测总价
+- GET  /api/trend/:city       : 城市历史价格趋势与未来 N 年预测
+- GET  /api/ranking           : 城市房价/性价比榜单
+- POST /api/analyze           : 自然语言分析（AI 问答，基于本地大模型 + RAG）
 
-# 步骤 2a：一键启动后端（API + Dash看板）
-#   python run_system.py
-
-# 步骤 2b：启动前端开发服务器（新终端）
-#   cd frontend && npm run dev
-
-# 步骤 3：访问服务
-#   前端主页：http://localhost:5173
-#   API接口文档：http://127.0.0.1:8000/docs
-#   健康检查：http://127.0.0.1:8000/health
-#   Dash看板：http://127.0.0.1:8050
-
-
-# ============================================================
-# 单独启动命令
-# ============================================================
-#   API 服务：        python api/main.py
-#   Dash 看板：       python dashboard/app.py
-#   前端开发服务器：   cd frontend && npm run dev
-#   前端生产构建：     cd frontend && npm run build
-#   爬虫单独运行：     python scrapers/lianjia_spider.py
-#   模型训练：         python models/train.py
-
-
-# ============================================================
-# API 接口列表
-# ============================================================
-#   GET  /health                       健康检查
-#   GET  /api/cities                   获取所有城市及统计
-#   GET  /api/cities/{city}/listings   城市房源列表（分页、排序、筛选）
-#   GET  /api/cities/{city}/stats      城市统计数据（价格、区域、户型分布）
-#   GET  /api/listings/{id}            房源详情
-#   GET  /api/predict/city_trend/{city} 城市趋势预测
-#   POST /api/predict/listing_future   房源未来价格预测
-#   POST /api/analyze/text             NLP文本分析
-#   POST /api/analyze/listing/{id}     房源描述分析
-#   GET  /api/dashboard/overview       仪表盘总览
-#   GET  /api/dashboard/yearly_trend    年度趋势数据
+说明：以上路由名以 api/main.py 中实际注册为准；前端页面通过 React 调用对应接口。

@@ -1,270 +1,145 @@
-# 🏡 RealEstateAI — 中国城市房地产 AI 分析平台
+# RealEstateAI - 房地产 AI 分析系统
 
-基于机器学习的房地产数据分析平台，提供房价预测、文本智能分析、趋势预测、数据可视化等功能。
+RealEstateAI 是一个完整的房地产 AI 分析系统，覆盖**数据采集 → 价格预测 → 趋势预测 → AI 智能分析**全链路，并提供 **Flask 看板 + React 前端**的可视化界面。系统支持 30 个城市（基于链家/贝壳二手房数据），能够：
 
-## ✨ 核心功能
+- 预测二手房总价与单价（机器学习模型）
+- 预测城市房价未来趋势（时间序列模型）
+- 通过自然语言提问，由本地大模型（GLM-4-9B）+ RAG 给出分析报告
+- 在看板与前端中可视化城市房价、价格分布、性价比榜单等
 
-| 功能 | 说明 |
-|------|------|
-| 城市房源浏览 | 查看所有城市的房源数据，支持分页、排序、价格/面积筛选 |
-| 趋势预测 | 选择单条房源，基于历史数据预测未来 1-20 年的价格走势 |
-| 房价预测 | 输入房屋特征（面积、年份、城市、户型、楼层），预测二手房总价 |
-| NLP 文本分析 | 从房产文本中自动提取成交价、识别区域、检测虚假宣传、情感分析 |
-| 数据可视化 | 交互式仪表盘展示房价趋势、城市对比、价格-面积散点图 |
-| 数据采集 | 链家 + 贝壳二手房真实数据爬虫，覆盖 29 个中国城市 |
+---
 
-## 🛠️ 技术栈
-
-| 模块 | 技术 |
-|------|------|
-| 前端框架 | React 19 + TypeScript + Vite |
-| UI 框架 | Tailwind CSS 3 + shadcn/ui (Radix UI) |
-| 图表库 | Recharts（前端）/ Plotly Dash（传统看板） |
-| Web 框架 | FastAPI + Uvicorn |
-| 机器学习 | XGBoost + 随机森林 + Blending 融合模型 |
-| 趋势预测 | 线性回归 + 多项式拟合 |
-| 数据处理 | pandas + numpy + scikit-learn |
-| NLP 引擎 | Transformers + Sentence-Transformers |
-| 数据库 | SQLite + SQLAlchemy |
-| 爬虫 | Requests + BeautifulSoup4 |
-
-## 📁 项目结构
+## 系统架构
 
 ```
-RealEstateAI/
-├── run_system.py              # 一键启动入口（API + Dash看板）
-├── run_update.py              # 一键数据更新（爬取 + 训练）
-├── requirements.txt           # Python 依赖清单
-├── .env                       # 环境配置
-│
-├── api/                       # FastAPI 后端接口
-│   └── main.py                #   房源查询、趋势预测、NLP分析
-│
-├── frontend/                  # React 前端应用
-│   └── src/
-│       ├── components/        #   通用组件（导航栏等）
-│       ├── sections/          #   页面组件
-│       │   ├── DashboardPage.tsx        # 数据仪表盘
-│       │   ├── CityListingsPage.tsx     # 城市房源列表
-│       │   ├── ListingDetailPage.tsx    # 房源详情 + 趋势预测
-│       │   └── NLPAnalysisPage.tsx      # NLP 文本分析
-│       ├── types/api.ts       #   TypeScript 类型 + API 封装
-│       └── lib/               #   工具函数
-│
-├── dashboard/                 # Plotly Dash 可视化看板（传统版）
-│   └── app.py
-│
-├── scrapers/                  # 数据爬虫
-│   └── lianjia_spider.py      #   链家/贝壳二手房爬虫（29个城市）
-│
-├── data_pipeline/             # 数据处理
-│   └── feature_engineering.py #   特征工程
-│
-├── models/                    # 模型文件
-│   ├── train.py               #   房价预测模型训练
-│   ├── trend_predictor.py     #   趋势预测模型
-│   └── *.pkl                  #   训练好的模型文件
-│
-├── nlp_module/                # NLP 模块
-│   └── ai_analyzer.py         #   文本分析引擎
-│
-├── utils/                     # 工具
-│   └── database.py            #   数据库 ORM 模型
-│
-├── data/                      # 数据目录
-│   └── realestate.db          #   SQLite 数据库
-│
-├── log/                       # 日志
-└── cache/                     # NLP 模型缓存
+数据采集层      scrapers/lianjia_spider.py  →  SQLite (data/realestate.db)
+数据处理层      data_pipeline/feature_engineering.py
+模型层          models/train.py (价格) / models/trend_predictor.py (趋势)
+服务层          api/ (FastAPI 接口) + dashboard/ (Flask 看板)
+展示层          frontend/ (React + Vite + Ant Design) / dashboard 模板
+AI 分析层       nlp_module/ai_analyzer.py (本地大模型 + RAG)
 ```
 
-## 🚀 快速开始
+数据流向：**爬虫 → 数据库 → 特征工程 → 模型训练 → API/看板/前端展示**。
 
-### 1. 环境准备
+---
 
-**Python 后端：**
+## 功能特性
+
+1. **多城市数据采集**：内置 30 个城市，链家/贝壳双平台爬虫；真实请求失败时自动回退到内置模拟数据，保证离线可运行。
+2. **价格预测**：XGBoost + RandomForest + 加权融合模型，输入城市、面积、户型、楼层、建成年份等，输出单价与总价预测。
+3. **趋势预测**：多项式回归时间序列模型，基于 2022–2024 历史均价拟合，预测城市未来房价走势与年化增长率。
+4. **AI 智能分析**：基于本地部署的 `THUDM/glm-4-9b-chat` 大模型，支持意图识别、数据检索增强（RAG）与示例引导，生成自然语言分析报告（支持中文问答）。
+5. **可视化看板**：Flask + Plotly 看板，展示城市均价、价格分布、户型/面积统计、性价比榜单、趋势曲线。
+6. **现代前端**：React + Vite + Ant Design + Tailwind CSS 构建的响应式界面，与后端 API 联动。
+
+---
+
+## 项目结构
+
+完整目录说明见 [`menu.txt`](./menu.txt)。核心目录如下：
+
+```
+api/               FastAPI 后端（路由、预测、分析、NLP 接口）
+models/            模型训练脚本与训练产物（*.pkl）
+nlp_module/        AI 分析模块（本地大模型实现）
+data_pipeline/     特征工程
+scrapers/          链家/贝壳爬虫
+utils/            数据库、常量、文本处理等工具
+dashboard/        Flask 可视化看板
+frontend/         React 前端（含 dist/ 构建产物）
+data/             运行时 SQLite 数据库
+run_system.py     一键启动脚本
+run_update.py     数据更新（爬取 + 训练）脚本
+.env              运行配置（端口、HF 镜像源）
+```
+
+---
+
+## 快速开始
+
+### 1. 安装依赖
 
 ```bash
-# 安装 Python 依赖
 pip install -r requirements.txt
 ```
 
-**React 前端（需要 Node.js 18+）：**
+> 说明：`torch`、`transformers` 体积较大；AI 问答依赖 `THUDM/glm-4-9b-chat` 模型权重（已下载至本地 `models/glm4` 目录）。若需重新下载，项目已通过 `.env` 中的 `HF_ENDPOINT=https://hf-mirror.com` 配置国内镜像以加速拉取。
 
-```bash
-cd frontend
-npm install
+### 2. 配置（可选）
+
+编辑 `.env` 调整端口与镜像源：
+
+```
+API_HOST=127.0.0.1
+API_PORT=8000
+DASHBOARD_HOST=127.0.0.1
+DASHBOARD_PORT=8050
+HF_ENDPOINT=https://hf-mirror.com
 ```
 
-### 2. 初始化数据（首次运行）
+### 3. 运行完整系统
 
 ```bash
-# 一键数据更新：爬取真实房源 → 生成历史数据 → 训练模型
-python run_update.py
-```
-
-此命令会自动完成：
-- 从链家和贝壳爬取北京、上海、广州、深圳等 29 个城市的真实房源数据
-- 生成 2022-2025 年的历史趋势数据
-- 训练 XGBoost + 随机森林房价预测模型
-- 训练各城市趋势预测模型
-
-### 3. 启动服务
-
-**方式一：一键启动（推荐）**
-
-打开两个终端：
-
-```bash
-# 终端 1：启动后端（API + Dash 看板）
 python run_system.py
 ```
 
-```bash
-# 终端 2：启动前端开发服务器
-cd frontend
-npm run dev
-```
+该脚本会：
+- 初始化数据库；
+- 若缺少模型文件（`xgb_model.pkl` / `rf_model.pkl` / `blend_model.pkl` / `trend_predictor.pkl`）则自动训练；
+- 启动 FastAPI 后端（默认 `http://127.0.0.1:8000`）；
+- 启动 Flask 看板（默认 `http://127.0.0.1:8050`）；
+- 构建并预览 React 前端（开发模式 `http://localhost:5173`，生产静态文件由 API 挂载）。
 
-**方式二：分别启动**
-
-```bash
-# 启动 API 服务
-python api/main.py
-
-# 启动 Dash 看板（可选）
-python dashboard/app.py
-
-# 启动前端（新终端）
-cd frontend && npm run dev
-```
-
-### 4. 访问服务
-
-| 服务 | 地址 |
-|------|------|
-| **前端主页** | http://localhost:5173 |
-| API 接口文档 (Swagger) | http://127.0.0.1:8000/docs |
-| 健康检查 | http://127.0.0.1:8000/health |
-| Dash 可视化看板 | http://127.0.0.1:8050 |
-
-### 5. 功能页面说明
-
-| 页面 | 路由 | 功能 |
-|------|------|------|
-| 数据仪表盘 | `/` | 房源总览、城市房价排行、装修分布、价格-面积散点图 |
-| 城市房源 | `/city/:cityName` | 按城市浏览房源，支持分页、排序、价格/面积筛选 |
-| 房源详情 | `/predict/:id` | 查看房源详细信息，**预测未来 1-20 年价格趋势** |
-| NLP 分析 | `/nlp` | 输入房产文本，提取成交价、识别区域、检测虚假宣传、情感分析 |
-
-### 6. 数据更新
+### 4. 更新数据与模型
 
 ```bash
-# 清空旧数据 → 重新爬取 → 重新训练所有模型
 python run_update.py
-
-# 或仅爬虫
-python scrapers/lianjia_spider.py
-
-# 或仅训练预测模型
-python models/train.py
 ```
 
-## 📡 核心 API 接口
+将重新爬取房源、生成 2022–2024 历史数据、训练价格与趋势模型。
 
-### 城市房源列表 `GET /api/cities/{city}/listings`
+---
 
-支持分页、排序、价格和面积筛选。
+## API 接口
 
-```
-GET /api/cities/北京/listings?page=1&page_size=20&sort_by=price&sort_order=desc&min_price=100&max_price=1000
-```
-
-### 房源未来趋势预测 `POST /api/predict/listing_future`
-
-```json
-// 请求
-{ "city": "北京", "current_price": 500, "area": 89, "future_years": 5 }
-
-// 响应示例
-{
-  "city": "北京",
-  "current_price": 500.0,
-  "predictions": [
-    { "year": 2027, "predicted_price": 537.75, "yoy_growth": 7.55 },
-    { "year": 2028, "predicted_price": 580.50, "yoy_growth": 7.95 },
-    ...
-  ],
-  "total_growth": 36.15
-}
-```
-
-### NLP 文本分析 `POST /api/analyze/text`
-
-输入房产描述文本，自动提取成交价、识别区域、检测虚假宣传风险、分析情感倾向。
-
-### 城市趋势预测 `GET /api/predict/city_trend/{city}?future_years=5`
-
-获取指定城市未来 N 年的平均房价趋势。
-
-### 其他接口
+后端默认地址 `http://127.0.0.1:8000`，主要接口：
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/cities` | 所有城市及统计 |
-| GET | `/api/cities/{city}/stats` | 城市详细统计（区域、户型、装修分布） |
-| GET | `/api/listings/{id}` | 房源详情 + 同小区房源 |
-| POST | `/api/analyze/listing/{id}` | 分析指定房源描述 |
-| GET | `/api/dashboard/overview` | 仪表盘总览数据 |
-| GET | `/api/dashboard/yearly_trend` | 年度房价走势 |
+| GET  | `/` | 健康检查 / API 说明 |
+| GET  | `/api/cities` | 支持的城市列表 |
+| GET  | `/api/stats/:city` | 城市统计（房源数、均价、面积分布等） |
+| POST | `/api/predict` | 给定城市+面积+户型等参数，预测单价与总价 |
+| POST | `/api/predict/price` | 给定完整特征直接预测总价 |
+| GET  | `/api/trend/:city` | 城市历史趋势与未来 N 年预测 |
+| GET  | `/api/ranking` | 城市房价/性价比榜单 |
+| POST | `/api/analyze` | 自然语言分析（AI 问答，本地大模型 + RAG） |
 
-## 🧠 模型说明
+> 路由名以 `api/main.py` 实际注册为准。
 
-### 房价预测模型（Blending 融合）
+---
 
-```
-输入特征 → XGBoost 预测 ──┐
-                           ├→ 线性回归融合 → 最终价格
-输入特征 → 随机森林 预测 ──┘
-```
+## 模型说明
 
-### 趋势预测模型
+- **价格预测模型**（`models/train.py`）：以城市、面积、房龄、户型、楼层等特征训练 XGBoost 与 RandomForest，再做加权融合（`blend_model.pkl`）。特征标准化器 `scaler.pkl` 与特征列顺序 `feature_cols.pkl` 与 API 端严格一致。
+- **趋势预测模型**（`models/trend_predictor.py`）：对每个城市按年份聚合均价，使用二次多项式回归拟合趋势，预测未来房价与年化增长率，保存为 `trend_predictor.pkl`。
+- **AI 分析模型**（`nlp_module/ai_analyzer.py`）：本地加载 `THUDM/glm-4-9b-chat`，结合数据库检索（RAG）与示例提示，生成分析报告。
 
-基于每个城市的历史年份数据，采用线性回归 + 多项式组合拟合，外推未来 1-20 年的价格走势。支持按面积系数调整预测值。
+---
 
-## 📊 数据流程
+## 技术栈
 
-```
-链家/贝壳真实数据 → SQLite数据库 → 特征工程 → 模型训练
-                                         ↓
-                                   独热编码 + 标准化
-                                         ↓
-                                   API服务 ← 模型文件(.pkl)
-                                         ↓
-                              React前端 / Dash看板 / Swagger文档
-```
+- **后端**：FastAPI、SQLAlchemy、pandas、scikit-learn、XGBoost、transformers / torch
+- **数据采集**：requests、BeautifulSoup、lxml
+- **可视化**：Flask、Plotly
+- **前端**：React、Vite、Ant Design、Tailwind CSS、Axios
+- **NLP**：Transformers、Jieba
 
-## 📝 依赖说明
+---
 
-| 依赖 | 用途 |
-|------|------|
-| fastapi + uvicorn | Web API 框架 + ASGI 服务器 |
-| scikit-learn + xgboost | 机器学习模型 |
-| pandas + numpy | 数据处理 |
-| sentence-transformers | NLP 语义分析 |
-| requests + beautifulsoup4 | 网页爬虫 |
-| sqlalchemy | 数据库 ORM |
-| python-dotenv | 环境变量管理 |
-| React + Vite + TypeScript | 前端框架 |
-| Tailwind CSS + shadcn/ui | UI 组件库 |
-| Recharts | 前端图表 |
-| Plotly + Dash | 传统可视化看板 |
+## 注意事项
 
-## 👤 作者
-
-- **hefeiyu**
-- Email: 1340863075@qq.com
-
-## 📄 许可证
-
-本项目仅供学习参考使用。
+- 爬虫真实请求可能受反爬限制，系统已内置模拟数据回退，离线也能完整演示。
+- AI 问答需要本地大模型权重（约数 GB），首次运行若缺失将自动尝试下载（受 `.env` 镜像源影响）。
+- 项目为演示/学习用途，价格与趋势预测基于历史统计拟合，不构成任何投资或交易建议。
