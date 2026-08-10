@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,29 +7,21 @@ import {
 } from "lucide-react";
 import { api } from "@/types/api";
 import { formatPrice } from "@/lib/format";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const selectClass =
   "h-10 w-full rounded-md border border-input bg-background px-3 text-sm " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring " +
   "focus-visible:ring-offset-2";
 
-const ALL_CITIES = [
-  '北京', '上海', '广州', '深圳',
-  '成都', '重庆', '杭州', '武汉', '天津',
-  '苏州', '南京', '西安', '郑州', '长沙',
-  '合肥', '青岛', '东莞', '佛山', '宁波',
-  '大连', '沈阳', '济南', '昆明', '厦门',
-  '福州', '无锡', '珠海', '哈尔滨', '南宁',
-];
-
-const SUPPORTED_LAYOUTS = ['2室1厅', '3室1厅', '3室2厅'];
-const SUPPORTED_FLOORS = ['低楼层', '中楼层', '高楼层'];
-
+// 城市/户型/楼层列表从后端 /api/config/predict 获取，
+// 与 utils/constants.py 保持单一数据源，变更需重新训练模型。
 export default function PricePredictPage() {
-  const [city, setCity] = useState('北京');
+  const [config, setConfig] = useState<{ cities: string[]; layouts: string[]; floors: string[] } | null>(null);
+  const [city, setCity] = useState('');
   const [area, setArea] = useState('89');
-  const [layout, setLayout] = useState('3室2厅');
-  const [floor, setFloor] = useState('中楼层');
+  const [layout, setLayout] = useState('');
+  const [floor, setFloor] = useState('');
   const [buildingYear, setBuildingYear] = useState('2015');
   const [tradeYear, setTradeYear] = useState('2025');
 
@@ -37,7 +29,17 @@ export default function PricePredictPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<number | null>(null);
 
+  useEffect(() => {
+    api.getPredictConfig().then(cfg => {
+      setConfig(cfg);
+      setCity(cfg.cities[0] || '');
+      setLayout(cfg.layouts[0] || '');
+      setFloor(cfg.floors[0] || '');
+    });
+  }, []);
+
   const handlePredict = async () => {
+    if (!config) return;
     setLoading(true);
     setError(null);
     setResult(null);
@@ -54,9 +56,9 @@ export default function PricePredictPage() {
         area: a,
         building_year: by,
       };
-      ALL_CITIES.forEach((c) => { features[`city_${c}`] = c === city ? 1 : 0; });
-      SUPPORTED_LAYOUTS.forEach((l) => { features[`layout_${l}`] = l === layout ? 1 : 0; });
-      SUPPORTED_FLOORS.forEach((f) => { features[`floor_info_${f}`] = f === floor ? 1 : 0; });
+      config.cities.forEach((c) => { features[`city_${c}`] = c === city ? 1 : 0; });
+      config.layouts.forEach((l) => { features[`layout_${l}`] = l === layout ? 1 : 0; });
+      config.floors.forEach((f) => { features[`floor_info_${f}`] = f === floor ? 1 : 0; });
 
       const res = await api.predictPrice(features);
       setResult(res.predicted_price);
@@ -66,6 +68,15 @@ export default function PricePredictPage() {
       setLoading(false);
     }
   };
+
+  if (!config) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-8 space-y-4">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-80 rounded-xl" />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -90,7 +101,7 @@ export default function PricePredictPage() {
               <MapPin className="w-4 h-4 text-muted-foreground" /> 城市
             </label>
             <select className={selectClass} value={city} onChange={(e) => setCity(e.target.value)}>
-              {ALL_CITIES.map((c) => (
+              {config.cities.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
@@ -119,7 +130,7 @@ export default function PricePredictPage() {
                 <Home className="w-4 h-4 text-muted-foreground" /> 户型
               </label>
               <select className={selectClass} value={layout} onChange={(e) => setLayout(e.target.value)}>
-                {SUPPORTED_LAYOUTS.map((l) => (
+                {config.layouts.map((l) => (
                   <option key={l} value={l}>{l}</option>
                 ))}
               </select>
@@ -129,7 +140,7 @@ export default function PricePredictPage() {
                 <Building2 className="w-4 h-4 text-muted-foreground" /> 楼层
               </label>
               <select className={selectClass} value={floor} onChange={(e) => setFloor(e.target.value)}>
-                {SUPPORTED_FLOORS.map((f) => (
+                {config.floors.map((f) => (
                   <option key={f} value={f}>{f}</option>
                 ))}
               </select>

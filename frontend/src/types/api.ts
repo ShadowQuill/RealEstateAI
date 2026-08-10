@@ -133,6 +133,13 @@ export interface YearlyTrend {
   };
 }
 
+export interface PredictConfig {
+  cities: string[];
+  layouts: string[];
+  floors: string[];
+  source: string;
+}
+
 // ==================== API 配置 ====================
 
 const API_BASE = 'http://localhost:8000';
@@ -204,4 +211,7 @@ export const api = {
   // 仪表盘
   getDashboardOverview: () => fetchAPI<DashboardOverview>('/api/dashboard/overview'),
   getYearlyTrend: () => fetchAPI<YearlyTrend>('/api/dashboard/yearly_trend'),
+
+  // 配置（避免前端硬编码城市/户型/楼层列表）
+  getPredictConfig: () => fetchAPI<PredictConfig>('/api/config/predict'),
 };

@@ -1,10 +1,10 @@
 # RealEstateAI - 房地产 AI 分析系统
 
-RealEstateAI 是一个完整的房地产 AI 分析系统，覆盖**数据采集 → 价格预测 → 趋势预测 → AI 智能分析**全链路，并提供 **Flask 看板 + React 前端**的可视化界面。系统支持 30 个城市（基于链家/贝壳二手房数据），能够：
+RealEstateAI 是一个完整的房地产 AI 分析系统，覆盖**数据采集 → 价格预测 → 趋势预测 → AI 智能分析**全链路，并提供 **Flask 看板 + React 前端**的可视化界面。系统支持 29 个城市（基于链家/贝壳二手房数据），能够：
 
 - 预测二手房总价与单价（机器学习模型）
 - 预测城市房价未来趋势（时间序列模型）
-- 通过自然语言提问，由本地大模型（GLM-4-9B）+ RAG 给出分析报告
+- 对房源描述进行 AI 文本分析：成交价提取、虚假宣传检测、区域识别、情感分析（基于 SentenceTransformer 语义模型）
 - 在看板与前端中可视化城市房价、价格分布、性价比榜单等
 
 ---
@@ -17,7 +17,7 @@ RealEstateAI 是一个完整的房地产 AI 分析系统，覆盖**数据采集 
 模型层          models/train.py (价格) / models/trend_predictor.py (趋势)
 服务层          api/ (FastAPI 接口) + dashboard/ (Flask 看板)
 展示层          frontend/ (React + Vite + Ant Design) / dashboard 模板
-AI 分析层       nlp_module/ai_analyzer.py (本地大模型 + RAG)
+AI 分析层       nlp_module/ai_analyzer.py (SentenceTransformer 语义模型)
 ```
 
 数据流向：**爬虫 → 数据库 → 特征工程 → 模型训练 → API/看板/前端展示**。
@@ -29,7 +29,7 @@ AI 分析层       nlp_module/ai_analyzer.py (本地大模型 + RAG)
 1. **多城市数据采集**：内置 30 个城市，链家/贝壳双平台爬虫；真实请求失败时自动回退到内置模拟数据，保证离线可运行。
 2. **价格预测**：XGBoost + RandomForest + 加权融合模型，输入城市、面积、户型、楼层、建成年份等，输出单价与总价预测。
 3. **趋势预测**：多项式回归时间序列模型，基于 2022–2024 历史均价拟合，预测城市未来房价走势与年化增长率。
-4. **AI 智能分析**：基于本地部署的 `THUDM/glm-4-9b-chat` 大模型，支持意图识别、数据检索增强（RAG）与示例引导，生成自然语言分析报告（支持中文问答）。
+4. **AI 文本分析**：基于 `sentence-transformers`（paraphrase-multilingual-MiniLM-L12-v2）语义模型，支持成交价提取、虚假宣传检测（语义相似度+关键词库）、区域/特征提取、情感分析等能力。
 5. **可视化看板**：Flask + Plotly 看板，展示城市均价、价格分布、户型/面积统计、性价比榜单、趋势曲线。
 6. **现代前端**：React + Vite + Ant Design + Tailwind CSS 构建的响应式界面，与后端 API 联动。
 
@@ -42,7 +42,7 @@ AI 分析层       nlp_module/ai_analyzer.py (本地大模型 + RAG)
 ```
 api/               FastAPI 后端（路由、预测、分析、NLP 接口）
 models/            模型训练脚本与训练产物（*.pkl）
-nlp_module/        AI 分析模块（本地大模型实现）
+nlp_module/        AI 文本分析模块（SentenceTransformer）
 data_pipeline/     特征工程
 scrapers/          链家/贝壳爬虫
 utils/            数据库、常量、文本处理等工具
@@ -64,7 +64,7 @@ run_update.py     数据更新（爬取 + 训练）脚本
 pip install -r requirements.txt
 ```
 
-> 说明：`torch`、`transformers` 体积较大；AI 问答依赖 `THUDM/glm-4-9b-chat` 模型权重（已下载至本地 `models/glm4` 目录）。若需重新下载，项目已通过 `.env` 中的 `HF_ENDPOINT=https://hf-mirror.com` 配置国内镜像以加速拉取。
+> 说明：`torch`、`transformers`、`sentence-transformers` 体积较大；NLP 语义模型（paraphrase-multilingual-MiniLM-L12-v2）首次运行时会自动下载至 `cache/` 目录。项目已通过 `.env` 中的 `HF_ENDPOINT=https://hf-mirror.com` 配置国内镜像以加速拉取。
 
 ### 2. 配置（可选）
 
@@ -124,22 +124,22 @@ python run_update.py
 
 - **价格预测模型**（`models/train.py`）：以城市、面积、房龄、户型、楼层等特征训练 XGBoost 与 RandomForest，再做加权融合（`blend_model.pkl`）。特征标准化器 `scaler.pkl` 与特征列顺序 `feature_cols.pkl` 与 API 端严格一致。
 - **趋势预测模型**（`models/trend_predictor.py`）：对每个城市按年份聚合均价，使用二次多项式回归拟合趋势，预测未来房价与年化增长率，保存为 `trend_predictor.pkl`。
-- **AI 分析模型**（`nlp_module/ai_analyzer.py`）：本地加载 `THUDM/glm-4-9b-chat`，结合数据库检索（RAG）与示例提示，生成分析报告。
+- **AI 分析模型**（`nlp_module/ai_analyzer.py`）：基于 `sentence-transformers` 加载 `paraphrase-multilingual-MiniLM-L12-v2` 模型，结合正则匹配进行成交价/单价提取、语义相似度虚假宣传检测、区域与特征提取、情感分析，生成综合分析报告。
 
 ---
 
 ## 技术栈
 
-- **后端**：FastAPI、SQLAlchemy、pandas、scikit-learn、XGBoost、transformers / torch
+- **后端**：FastAPI、SQLAlchemy、pandas、scikit-learn、XGBoost
 - **数据采集**：requests、BeautifulSoup、lxml
-- **可视化**：Flask、Plotly
-- **前端**：React、Vite、Ant Design、Tailwind CSS、Axios
-- **NLP**：Transformers、Jieba
+- **可视化**：Flask、Plotly (Dash)
+- **前端**：React、Vite、Tailwind CSS、Recharts、Radix UI
+- **NLP**：sentence-transformers
 
 ---
 
 ## 注意事项
 
 - 爬虫真实请求可能受反爬限制，系统已内置模拟数据回退，离线也能完整演示。
-- AI 问答需要本地大模型权重（约数 GB），首次运行若缺失将自动尝试下载（受 `.env` 镜像源影响）。
-- 项目为演示/学习用途，价格与趋势预测基于历史统计拟合，不构成任何投资或交易建议。
+- NLP 语义模型首次运行时会自动下载（约 120MB），之后缓存于 `cache/` 目录。
+- 前端 `PricePredictPage.tsx` 中的城市/户型/楼层列表需与 `utils/constants.py` 保持一致，变更需重新训练模型。

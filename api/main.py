@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import func, distinct
 
+from utils.constants import ALL_CITIES, SUPPORTED_LAYOUTS, SUPPORTED_FLOORS, build_feature_cols
 from utils.database import SessionLocal, House, init_db, migrate_db
 from nlp_module.ai_analyzer import AIRealEstateAnalyzer
 from contextlib import asynccontextmanager
@@ -513,6 +514,19 @@ def yearly_trend():
         return {"yearly_trends": result}
     finally:
         db.close()
+
+
+# ==================== 配置接口 ====================
+
+@app.get("/api/config/predict")
+def get_predict_config():
+    """返回价格预测所需的特征配置（城市、户型、楼层），前端无需硬编码"""
+    return {
+        "cities": ALL_CITIES,
+        "layouts": SUPPORTED_LAYOUTS,
+        "floors": SUPPORTED_FLOORS,
+        "source": "utils/constants.py",
+    }
 
 
 if __name__ == "__main__":
