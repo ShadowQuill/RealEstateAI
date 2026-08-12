@@ -2,7 +2,8 @@
 ================================
 
 RealEstateAI 是一个房地产 AI 分析系统，涵盖数据采集、价格预测、趋势预测与 AI 文本分析，
-并配套 Dash 看板与 React 前端，用于可视化城市房价、价格预测分析与 NLP 文本分析。
+并配套 Flask 看板与 React 前端，用于可视化城市房价、价格预测分析与 NLP 文本分析。
+当前支持 54 个城市（链家/贝壳二手房 + 国家统计局 70 城房价指数）。
 
 整体目录布局
 ------------
@@ -10,8 +11,8 @@ RealEstateAI/
 ├── api/                       # 后端 API 服务（FastAPI）
 │   └── main.py                #   应用入口：CORS、lifespan 模型预热、所有路由注册、静态文件挂载
 ├── models/                    # 训练好的模型（.pkl）与训练脚本
-│   ├── train.py               #   价格预测模型训练（XGBoost / RandomForest / 加权融合）
-│   ├── trend_predictor.py     #   时间序列趋势预测（多项式回归）训练与预测
+│   ├── train.py               #   价格预测模型训练（XGBoost / RandomForest / 加权融合，含装修/朝向）
+│   ├── trend_predictor.py     #   时间序列趋势预测训练与预测（真实成交/官方指数折算/邻城指数代理）
 │   ├── xgb_model.pkl          #   训练产物：XGBoost 价格模型
 │   ├── rf_model.pkl           #   训练产物：RandomForest 价格模型
 │   ├── blend_model.pkl        #   训练产物：融合（加权）价格模型
@@ -21,24 +22,36 @@ RealEstateAI/
 ├── nlp_module/                # 自然语言分析模块
 │   └── ai_analyzer.py         #   SentenceTransformer 语义模型：成交价/单价提取、虚假宣传检测、区域/特征提取、情感分析
 ├── data_pipeline/             # 数据处理流水线
-│   └── feature_engineering.py #   从数据库抽取房源，清洗/独热编码/标准化，产出训练特征（scaler.pkl / feature_cols.pkl）
-├── scrapers/                  # 数据采集
-│   └── lianjia_spider.py      #   链家/贝壳多平台爬虫，真实请求失败自动回退模拟数据
+│   └── feature_engineering.py #   从数据库抽取房源，清洗/独热编码（含装修/朝向）/标准化，产出训练特征
+├── scrapers/                  # 数据采集（链家/贝壳 + 浏览器抓取 + 指数导入）
+│   ├── lianjia_spider.py      #   链家/贝壳多平台爬虫，真实请求失败自动回退模拟数据
+│   ├── chengjiao_browser.py   #   基于 Playwright + Cookie 的浏览器成交抓取（反爬规避，支持 --human 过验证）
+│   ├── save_cookies.py        #   弹出 Chrome 手动登录后导出 Cookie 到 data/raw/lianjia_cookies.json
+│   ├── convert_cookies.py     #   将 Cookie-Editor 导出 JSON 转换为 Playwright 可加载格式
+│   ├── index_importer.py      #   导入国家统计局 70 城房价指数到 city_index 表
+│   ├── dataset_importer.py    #   导入链家数据集（CSV/xlsx）到 houses 表
+│   ├── xlsx_importer.py       #   xlsx 房源文件导入
+│   ├── live_importer.py       #   实时/增量房源导入
+│   └── historical_generator.py#   历史数据生成/回填辅助
 ├── utils/                     # 通用工具
-│   ├── database.py            #   SQLAlchemy 模型 House 表、SQLite 初始化与迁移
-│   └── constants.py           #   城市列表/户型/楼层单一数据源与清洗逻辑、特征列构造
+│   ├── database.py            #   SQLAlchemy 模型 House/CityIndex 表、SQLite 初始化与迁移
+│   └── constants.py           #   54 城市列表/户型/楼层/装修/朝向单一数据源与清洗逻辑、特征列构造
 ├── dashboard/                 # 可视化看板（Dash / Plotly）
-│   └── app.py                 #   看板后端：图表数据接口、4 张图表 + 详情页数据表
+│   └── app.py                 #   看板后端：图表数据接口、图表 + 详情页数据表
 ├── frontend/                  # 前端（React + Vite + Tailwind CSS + Recharts + Radix UI）
-│   ├── src/                   #   源码（5 个页面、UI 组件、API 封装）
+│   ├── src/
+│   │   └── sections/          #   6 个页面：城市房源列表 / 房源详情 / 新房价格指数 /
+│   │                        #     价格预测 / 榜单看板 / AI 分析
 │   ├── dist/                  #   构建产物（已被 API 静态挂载）
 │   └── package.json           #   前端依赖与脚本
 ├── data/                      # 运行时数据（SQLite 库、缓存）
-│   └── realestate.db          #   房源数据库（运行爬虫后生成）
-├── cache/                     # 缓存目录（AI 问答 / 分析结果缓存）
+│   └── realestate.db          #   房源数据库（约 270MB，可再生，已被 .gitignore 忽略）
+├── data/raw/                  # Cookie 等凭证（已被 .gitignore 忽略）
+├── cache/                     # 缓存目录（NLP 模型 / AI 问答 / 分析结果缓存）
 ├── log/                       # 日志目录
 ├── run_system.py              # 一键启动脚本：API + 看板 + 前端构建/预览
-├── run_update.py              # 数据更新脚本：爬取 + 训练 + 趋势模型
+├── run_update.py              # 数据更新脚本：爬取 + 训练 + 趋势模型（会清空 houses 表）
+├── run_update_real.py         # 保留现有真实数据重训价格/趋势模型（推荐）
 ├── requirements.txt           # Python 依赖清单
 ├── .env                       # 运行配置（API/看板端口、HF 镜像源）
 ├── README.md                  # 项目说明文档
@@ -46,20 +59,30 @@ RealEstateAI/
 
 数据流向
 --------
-爬虫 scrapers  ->  数据库 data/realestate.db
+爬虫 scrapers / 指数导入  ->  数据库 data/realestate.db (houses / city_index)
 数据库         ->  feature_engineering  ->  train.py / trend_predictor.py  ->  models/*.pkl
 models/*.pkl   ->  api/main.py  ->  dashboard + frontend 展示
 
 城市覆盖
 --------
-内置 29 个城市（北京、上海、广州、深圳、成都、重庆、杭州、武汉、天津、苏州、南京、西安、
+内置 54 个城市：北京、上海、广州、深圳、成都、重庆、杭州、武汉、天津、苏州、南京、西安、
 郑州、长沙、合肥、青岛、东莞、佛山、宁波、大连、沈阳、济南、昆明、厦门、福州、无锡、珠海、
-哈尔滨、南宁）。
+哈尔滨、南宁、中山、温州、石家庄、南昌、贵阳、兰州、海口、太原、南通、嘉兴、保定、烟台、
+潍坊、扬州、镇江、唐山、廊坊、襄阳、泉州、泰州、芜湖、赣州、湛江、绍兴、昆山。
+
+趋势数据源分四类（接口 data_source 字段标明）：
+- 真实成交（多年份，如北京 2010–2018）
+- 官方指数折算（70 城样本内单年城市，按统计局同比指数链式折算近 10 年）
+- 邻城指数代理（非 70 城样本单年城市共 15 城，借用邻城官方指数折算，置信度较低）
+- 真实成交（单年）：无邻城/官方指数可折算时的兜底
 
 主要入口脚本
 ------------
-- python run_system.py ：启动完整系统（训练缺失模型时自动训练、拉起 API/看板、构建前端）
-- python run_update.py ：更新房源数据并重新训练价格与趋势模型
+- python run_system.py        ：启动完整系统（训练缺失模型时自动训练、拉起 API/看板、构建前端）
+- python run_update_real.py   ：保留真实数据，重新训练价格与趋势模型（推荐）
+- python run_update.py        ：更新房源数据并重新训练（会清空 houses 表，慎用）
+- python scrapers/save_cookies.py   ：浏览器登录导出 Cookie
+- python scrapers/chengjiao_browser.py --cities 中山 --human --pages 3 ：浏览器抓取成交
 
 核心 API 接口（FastAPI，默认 http://127.0.0.1:8000）
 ---------------------------------------------------
@@ -68,9 +91,13 @@ models/*.pkl   ->  api/main.py  ->  dashboard + frontend 展示
 - GET  /api/cities/{city}/listings         : 城市房源列表（分页、排序、筛选）
 - GET  /api/cities/{city}/stats            : 城市统计（房源数、均价、分布等）
 - GET  /api/listings/{listing_id}          : 房源详情（含同小区房源）
-- POST /api/predict/price                  : 给定完整特征，预测总价（万元）
-- GET  /api/predict/city_trend/{city}      : 城市历史趋势与未来 N 年预测
+- POST /api/predict/price                  : 给定完整特征（含装修/朝向），预测总价（万元）
+- GET  /api/predict/city_trend/{city}      : 城市历史趋势与未来 N 年预测（含数据源）
 - POST /api/predict/listing_future         : 单房源未来价格预测
+- GET  /api/index/cities                   : 70 城房价指数城市列表
+- GET  /api/index/{city}                   : 指定城市历年新房/二手房指数
+- GET  /api/index/compare                  : 多城指数对比
+- GET  /api/config/predict                 : 价格预测可选配置（户型/装修/朝向等）
 - POST /api/analyze/text                   : NLP 文本分析（价格提取、虚假宣传检测等）
 - POST /api/analyze/listing/{listing_id}   : 分析指定房源描述文本
 - GET  /api/dashboard/overview             : 仪表盘总览数据
