@@ -79,6 +79,7 @@ export default function ListingDetailPage() {
   ] : [];
 
   const totalGrowth = prediction?.total_growth || 0;
+  const trendSource = prediction?.city_trend.data_source;
   const badge = listing.price && listing.unit_price ? getPriceRatioBadge(1) : null;
 
   return (
@@ -162,7 +163,15 @@ export default function ListingDetailPage() {
                 <TrendingUp className="w-4 h-4 text-primary" />
                 未来价格趋势预测
               </CardTitle>
-              <CardDescription>基于{listing.city}历史数据的5年趋势预测</CardDescription>
+              <CardDescription>
+                {trendSource === '官方指数折算'
+                  ? `基于${listing.city}${prediction?.city_trend.anchor_year ?? ''}年真实成交 + 国家统计局70城二手住宅指数的5年趋势预测`
+                  : trendSource === '邻城指数代理'
+                  ? `基于${listing.city}${prediction?.city_trend.anchor_year ?? ''}年真实成交 + 邻近${prediction?.city_trend.neighbor_city ?? ''}官方二手住宅指数的5年趋势预测`
+                  : trendSource === '真实成交（单年）'
+                  ? `基于${listing.city}单年真实成交快照（${prediction?.city_trend.anchor_year ?? ''}年约30套在售房源）的5年趋势预测`
+                  : `基于${listing.city}历年真实成交数据的5年趋势预测`}
+              </CardDescription>
             </div>
             {!prediction && (
               <Button onClick={handlePredict} disabled={predicting} className="gap-2">
@@ -199,7 +208,34 @@ export default function ListingDetailPage() {
                   <p className="text-xs text-muted-foreground">当前价值</p>
                   <p className="text-xl font-bold">{formatPrice(prediction.current_price)}</p>
                 </div>
+                {trendSource && (
+                  <div className="ml-auto text-right">
+                    <p className="text-xs text-muted-foreground">趋势数据来源</p>
+                    <Badge variant="secondary" className="mt-1">{trendSource}</Badge>
+                  </div>
+                )}
               </div>
+
+              {trendSource === '官方指数折算' && (
+                <p className="text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
+                  该城市成交明细仅覆盖 {prediction.city_trend.anchor_year} 年，历年价格水平以当年真实成交均价为锚点、
+                  按国家统计局 70 城二手住宅价格同比指数折算得出，未使用任何模拟数据。
+                </p>
+              )}
+
+              {trendSource === '真实成交（单年）' && (
+                <p className="text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
+                  该城市仅有单年真实成交快照（{prediction.city_trend.anchor_year} 年约 30 套在售房源），缺乏多年历史成交数据，
+                  趋势预测以该年真实均价为基准，未使用任何模拟数据。
+                </p>
+              )}
+
+              {trendSource === '邻城指数代理' && (
+                <p className="text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
+                  该城市不在国家统计局 70 城样本内、缺乏多年成交明细，历年价格走势以 {prediction.city_trend.anchor_year} 年真实成交均价为锚点，
+                  借用邻近大城市 {prediction.city_trend.neighbor_city} 的官方二手住宅同比指数折算得出；趋势方向由真实官方指数驱动、置信度较低，未使用模拟数据。
+                </p>
+              )}
 
               {/* Chart */}
               <ChartContainer height={300} resetKey={chartData.length}>

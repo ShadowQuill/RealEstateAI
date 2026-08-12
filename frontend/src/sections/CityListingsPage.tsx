@@ -39,7 +39,7 @@ export default function CityListingsPage() {
   const pageSize = 20;
 
   useEffect(() => {
-    api.getCities().then(res => setCities(res.cities.map(c => c.name)));
+    api.getCities('二手房').then(res => setCities(res.cities.map(c => c.name)));
   }, []);
 
   const loadListings = useCallback(async () => {
@@ -54,8 +54,9 @@ export default function CityListingsPage() {
           min_area: areaRange[0] > 0 ? areaRange[0] : undefined,
           max_area: areaRange[1] < 500 ? areaRange[1] : undefined,
           region: region || undefined,
+          property_type: '二手房',
         }),
-        api.getCityStats(selectedCity),
+        api.getCityStats(selectedCity, '二手房'),
       ]);
       setListings(listData);
       setStats(statsData);
@@ -92,8 +93,11 @@ export default function CityListingsPage() {
   return (
     <div className="p-4 sm:p-6 space-y-6 max-w-7xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">城市房源</h1>
-        <p className="text-muted-foreground mt-1">浏览并选择房源，查看详细信息和未来价格预测</p>
+        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+          二手房源
+          <Badge variant="secondary" className="text-xs">真实成交数据</Badge>
+        </h1>
+        <p className="text-muted-foreground mt-1">浏览并选择二手房源，查看详细信息和未来价格预测</p>
       </div>
 
       {/* City Selector */}

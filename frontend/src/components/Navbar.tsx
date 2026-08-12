@@ -1,12 +1,13 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { Home, Building, LineChart, Sparkles, Menu, X, Sun, Moon } from "lucide-react";
+import { Home, Building, LineChart, Sparkles, Menu, X, Sun, Moon, Landmark } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 
 const navItems = [
   { to: "/", icon: Home, label: "仪表盘" },
-  { to: "/listings", icon: Building, label: "城市房源" },
+  { to: "/listings", icon: Building, label: "二手房" },
+  { to: "/newhouses", icon: Landmark, label: "新房" },
   { to: "/predict", icon: LineChart, label: "价格预测" },
   { to: "/nlp", icon: Sparkles, label: "NLP分析" },
 ];

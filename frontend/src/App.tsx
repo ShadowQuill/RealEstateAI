@@ -7,6 +7,7 @@ import CityListingsPage from "@/sections/CityListingsPage";
 import ListingDetailPage from "@/sections/ListingDetailPage";
 import NLPAnalysisPage from "@/sections/NLPAnalysisPage";
 import PricePredictPage from "@/sections/PricePredictPage";
+import NewHousePage from "@/sections/NewHousePage";
 import "./App.css";
 
 function AppRoutes() {
@@ -17,6 +18,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<ErrorBoundary key="dashboard"><DashboardPage /></ErrorBoundary>} />
       <Route path="/listings" element={<ErrorBoundary key="listings"><CityListingsPage /></ErrorBoundary>} />
+      <Route path="/newhouses" element={<ErrorBoundary key="newhouses"><NewHousePage /></ErrorBoundary>} />
       <Route path="/predict/:id" element={<ErrorBoundary key={location.pathname}><ListingDetailPage /></ErrorBoundary>} />
       <Route path="/predict" element={<ErrorBoundary key="predict"><PricePredictPage /></ErrorBoundary>} />
       <Route path="/nlp" element={<ErrorBoundary key="nlp"><NLPAnalysisPage /></ErrorBoundary>} />

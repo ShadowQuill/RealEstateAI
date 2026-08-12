@@ -10,6 +10,8 @@ from utils.constants import (
     ALL_CITIES,
     SUPPORTED_LAYOUTS,
     SUPPORTED_FLOORS,
+    SUPPORTED_DECORATIONS,
+    SUPPORTED_ORIENTATIONS,
     normalize_layout,
     clean_floor,
     build_feature_cols,
@@ -51,12 +53,25 @@ def load_and_prepare_data():
     # 楼层独热编码
     for f in SUPPORTED_FLOORS:
         df[f'floor_info_{f}'] = (df['floor_info'] == f).astype(int)
+    # 装修独热编码（缺失/未知 -> 全 0，由模型学到“无信息”基准）
+    for d in SUPPORTED_DECORATIONS:
+        df[f'dec_{d}'] = (df['decoration'] == d).astype(int)
+    # 朝向独热编码（缺失/未知/不在列表 -> 全 0）
+    for o in SUPPORTED_ORIENTATIONS:
+        df[f'ori_{o}'] = (df['orientation'] == o).astype(int)
+
+    # ---- 过滤无效样本（训练目标改为 单价 元/㎡）----
+    # 剔除单价缺失/非正/极端异常（>30万/㎡ 视为数据错误），以及面积无效行
+    before = len(df)
+    df = df[df['unit_price'].notna() & (df['unit_price'] > 0) & (df['unit_price'] < 300000)]
+    df = df[df['area'].notna() & (df['area'] > 0)]
+    print(f"🧹 过滤无效单价/面积: {before} -> {len(df)} 条")
 
     # 特征列（与API端HouseInput字段顺序一致）
     feature_cols = build_feature_cols()
 
     X = df[feature_cols].fillna(0)
-    y = df['price']
+    y = df['unit_price']  # 目标变量改为 单价（元/㎡），消除总价对面积的量纲依赖
 
     # 标准化数值特征（year 和 area, house_age）
     # 注意：year 我们也标准化，但预测时我们会传入未来年份，需要先标准化，所以scaler必须保存

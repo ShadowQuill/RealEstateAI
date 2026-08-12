@@ -17,9 +17,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import func, distinct
 
-from utils.constants import ALL_CITIES, SUPPORTED_LAYOUTS, SUPPORTED_FLOORS, build_feature_cols
-from utils.database import SessionLocal, House, init_db, migrate_db
-from nlp_module.ai_analyzer import AIRealEstateAnalyzer
+from utils.constants import ALL_CITIES, SUPPORTED_LAYOUTS, SUPPORTED_FLOORS, SUPPORTED_DECORATIONS, SUPPORTED_ORIENTATIONS, build_feature_cols
+from utils.database import SessionLocal, House, CityIndex, init_db, migrate_db
 from contextlib import asynccontextmanager
 
 
@@ -84,10 +83,15 @@ def get_nlp_analyzer():
     global nlp_analyzer
     if nlp_analyzer is None:
         try:
+            # 惰性导入：仅在该分析器首次被请求时才加载 torch/sentence_transformers，
+            # 避免后端主流程（价格/趋势/房源/指数）被沉重的 NLP 依赖拖垮。
+            # 若 torchvision 与 torch 版本不匹配导致加载失败，仅 NLP 接口降级，
+            # 不影响其它接口。
+            from nlp_module.ai_analyzer import AIRealEstateAnalyzer
             nlp_analyzer = AIRealEstateAnalyzer()
             print("✅ NLP分析器已加载")
         except Exception as e:
-            print(f"⚠️ NLP分析器加载失败: {e}")
+            print(f"⚠️ NLP分析器加载失败（NLP 接口将不可用，核心功能不受影响）: {e}")
             nlp_analyzer = None
     return nlp_analyzer
 
@@ -143,30 +147,41 @@ def health():
 # ==================== 全局数据 API ====================
 
 @app.get("/api/cities")
-def get_cities():
-    """获取所有城市列表及统计信息"""
+def get_cities(
+    property_type: str | None = Query(None, description="房源类型：二手房 / 新房；不传则返回全部")
+):
+    """获取所有城市列表及统计信息（可按房源类型过滤）"""
     db = SessionLocal()
     try:
-        cities = db.query(
+        query = db.query(
             House.city,
             func.count(House.id).label('count'),
             func.avg(House.price).label('avg_price'),
             func.min(House.price).label('min_price'),
             func.max(House.price).label('max_price')
-        ).group_by(House.city).all()
-        
+        )
+        if property_type:
+            pt_col = getattr(House, 'property_type', None)
+            if pt_col is not None:
+                query = query.filter(pt_col == property_type)
+        cities = query.group_by(House.city).all()
+
+        result_cities = []
+        for c in cities:
+            result_cities.append({
+                "name": c.city,
+                "count": c.count,
+                "avg_price": round(float(c.avg_price), 2) if c.avg_price else None,
+                "min_price": round(float(c.min_price), 2) if c.min_price else None,
+                "max_price": round(float(c.max_price), 2) if c.max_price else None,
+            })
+        # 按记录数降序，方便前端展示
+        result_cities.sort(key=lambda x: x['count'], reverse=True)
+
         return {
-            "cities": [
-                {
-                    "name": c.city,
-                    "count": c.count,
-                    "avg_price": round(float(c.avg_price), 2) if c.avg_price else None,
-                    "min_price": round(float(c.min_price), 2) if c.min_price else None,
-                    "max_price": round(float(c.max_price), 2) if c.max_price else None,
-                }
-                for c in cities
-            ],
-            "total_cities": len(cities)
+            "cities": result_cities,
+            "total_cities": len(result_cities),
+            "property_type": property_type,
         }
     finally:
         db.close()
@@ -186,6 +201,7 @@ def _house_to_dict(h):
         "decoration": getattr(h, 'decoration', None),
         "year": h.year,
         "building_year": getattr(h, 'building_year', None),
+        "property_type": getattr(h, 'property_type', None),
         "description": getattr(h, 'description', None),
         "url": h.url,
         "crawled_at": str(getattr(h, 'crawled_at', None) or getattr(h, 'created_at', None)),
@@ -204,11 +220,15 @@ def get_city_listings(
     min_area: float | None = None,
     max_area: float | None = None,
     region: str | None = None,
+    property_type: str = Query("二手房", description="房源类型：二手房 / 新房"),
 ):
-    """获取指定城市的房源列表（分页、排序、筛选）"""
+    """获取指定城市的房源列表（分页、排序、筛选），可按房源类型过滤"""
     db = SessionLocal()
     try:
         query = db.query(House).filter(House.city == city)
+        pt_col = getattr(House, 'property_type', None)
+        if pt_col is not None:
+            query = query.filter(pt_col == property_type)
         
         if min_price is not None:
             query = query.filter(House.price >= min_price)
@@ -245,11 +265,14 @@ def get_city_listings(
 
 
 @app.get("/api/cities/{city}/stats")
-def get_city_stats(city: str):
-    """获取城市房源统计信息"""
+def get_city_stats(city: str, property_type: str = Query("二手房", description="房源类型：二手房 / 新房")):
+    """获取城市房源统计信息（可按房源类型过滤）"""
     db = SessionLocal()
     try:
         base = db.query(House).filter(House.city == city)
+        pt_col = getattr(House, 'property_type', None)
+        if pt_col is not None:
+            base = base.filter(pt_col == property_type)
         total = base.count()
         
         price_stats = db.query(
@@ -258,33 +281,41 @@ def get_city_stats(city: str):
             func.max(House.price).label('max_price'),
             func.avg(House.unit_price).label('avg_unit_price'),
             func.avg(House.area).label('avg_area'),
-        ).filter(House.city == city).first()
+        ).filter(House.city == city)
+        if pt_col is not None:
+            price_stats = price_stats.filter(pt_col == property_type)
+        price_stats = price_stats.first()
         
         region_col = getattr(House, 'region', None)
         rooms_col = getattr(House, 'rooms', None)
-        
+        decoration_col = getattr(House, 'decoration', None)
+        pt_filter = (pt_col == property_type) if pt_col is not None else None
+
         regions = []
         if region_col is not None:
-            regions = db.query(
-                region_col, func.count(House.id).label('cnt')
-            ).filter(House.city == city).group_by(region_col).order_by(func.count(House.id).desc()).all()
-        
+            q = db.query(region_col, func.count(House.id).label('cnt')).filter(House.city == city)
+            if pt_filter is not None:
+                q = q.filter(pt_filter)
+            regions = q.group_by(region_col).order_by(func.count(House.id).desc()).all()
+
         room_dist = []
         if rooms_col is not None:
-            room_dist = db.query(
-                rooms_col, func.count(House.id).label('cnt')
-            ).filter(House.city == city).group_by(rooms_col).order_by(func.count(House.id).desc()).all()
-        
-        year_dist = db.query(
-            House.year, func.count(House.id).label('cnt')
-        ).filter(House.city == city).group_by(House.year).order_by(House.year).all()
-        
-        decoration_col = getattr(House, 'decoration', None)
+            q = db.query(rooms_col, func.count(House.id).label('cnt')).filter(House.city == city)
+            if pt_filter is not None:
+                q = q.filter(pt_filter)
+            room_dist = q.group_by(rooms_col).order_by(func.count(House.id).desc()).all()
+
+        q = db.query(House.year, func.count(House.id).label('cnt')).filter(House.city == city)
+        if pt_filter is not None:
+            q = q.filter(pt_filter)
+        year_dist = q.group_by(House.year).order_by(House.year).all()
+
         deco_dist = []
         if decoration_col is not None:
-            deco_dist = db.query(
-                decoration_col, func.count(House.id).label('cnt')
-            ).filter(House.city == city).group_by(decoration_col).all()
+            q = db.query(decoration_col, func.count(House.id).label('cnt')).filter(House.city == city)
+            if pt_filter is not None:
+                q = q.filter(pt_filter)
+            deco_dist = q.group_by(decoration_col).all()
         
         return {
             "city": city,
@@ -332,6 +363,100 @@ def get_listing_detail(listing_id: int):
         db.close()
 
 
+# ==================== 新房 / 二手房指数 API ====================
+# 数据源：国家统计局 70 城房价指数（city_index 表）。
+# 新房页使用官方指数（商品住宅价格指数），因其挂牌价≠成交价、受政策影响大，
+# 房源级新房价格失真；官方指数基于真实成交，最适合政策/走势分析。
+
+@app.get("/api/index/cities")
+def get_index_cities():
+    """返回 70 城指数覆盖的城市及其时间范围（新房/二手房指数）。"""
+    db = SessionLocal()
+    try:
+        rows = db.query(
+            CityIndex.city,
+            func.min(CityIndex.year), func.max(CityIndex.year),
+            func.count(CityIndex.id),
+        ).group_by(CityIndex.city).order_by(func.count(CityIndex.id).desc()).all()
+        return {
+            "cities": [
+                {"name": r[0], "min_year": r[1], "max_year": r[2], "count": r[3]}
+                for r in rows
+            ],
+            "total": len(rows),
+        }
+    finally:
+        db.close()
+
+
+@app.get("/api/index/{city}")
+def get_city_index(
+    city: str,
+    base_type: str = Query("同比", pattern="^(同比|环比)$"),
+):
+    """返回某城市的房价指数月度序列（新房/二手房，含各面积段）。"""
+    db = SessionLocal()
+    try:
+        rows = db.query(
+            CityIndex.year, CityIndex.month, CityIndex.date_str,
+            CityIndex.commodity_idx, CityIndex.secondhand_idx, CityIndex.resident_idx,
+            CityIndex.commodity_below90, CityIndex.commodity_144, CityIndex.commodity_above144,
+            CityIndex.secondhand_below90, CityIndex.secondhand_144, CityIndex.secondhand_above144,
+        ).filter(CityIndex.city == city, CityIndex.base_type == base_type).order_by(
+            CityIndex.year, CityIndex.month
+        ).all()
+
+        series = [{
+            "year": r.year, "month": r.month, "date": r.date_str,
+            "commodity_idx": r.commodity_idx,        # 新房（商品住宅）价格指数
+            "secondhand_idx": r.secondhand_idx,      # 二手房价格指数
+            "resident_idx": r.resident_idx,          # 二手住宅（总）
+            "commodity_below90": r.commodity_below90,
+            "commodity_144": r.commodity_144,
+            "commodity_above144": r.commodity_above144,
+            "secondhand_below90": r.secondhand_below90,
+            "secondhand_144": r.secondhand_144,
+            "secondhand_above144": r.secondhand_above144,
+        } for r in rows]
+
+        meta = db.query(
+            func.min(CityIndex.year), func.max(CityIndex.year), func.count(CityIndex.id)
+        ).filter(CityIndex.city == city, CityIndex.base_type == base_type).first()
+
+        return {
+            "city": city,
+            "base_type": base_type,
+            "date_range": {"min_year": meta[0], "max_year": meta[1], "count": meta[2]},
+            "series": series,
+        }
+    finally:
+        db.close()
+
+
+@app.get("/api/index/compare")
+def compare_index(
+    cities: str = Query(..., description="逗号分隔城市名，如 北京,上海,深圳"),
+    base_type: str = Query("同比", pattern="^(同比|环比)$"),
+    metric: str = Query("commodity_idx", pattern="^(commodity_idx|secondhand_idx|resident_idx)$"),
+):
+    """多城市指数对比（跨城新房/二手房走势）。"""
+    db = SessionLocal()
+    try:
+        city_list = [c.strip() for c in cities.split(",") if c.strip()]
+        metric_col = getattr(CityIndex, metric)
+        series = {}
+        for city in city_list:
+            rows = db.query(
+                CityIndex.year, CityIndex.month, metric_col
+            ).filter(
+                CityIndex.city == city, CityIndex.base_type == base_type
+            ).order_by(CityIndex.year, CityIndex.month).all()
+            series[city] = [{"year": y, "month": m, "value": v} for (y, m, v) in rows]
+        return {"base_type": base_type, "metric": metric, "series": series}
+    finally:
+        db.close()
+
+
 # ==================== 价格预测 API ====================
 
 @app.post("/api/predict/price")
@@ -355,6 +480,15 @@ def predict_price(features: dict):
             except Exception:
                 yr, by = 2020, 2000
             row['house_age'] = yr - by
+        # 装修/朝向：前端传原始字符串，这里转为与训练一致的独热编码
+        dec_raw = features.get('decoration')
+        for d in SUPPORTED_DECORATIONS:
+            if f'dec_{d}' in feature_cols:
+                row[f'dec_{d}'] = 1.0 if dec_raw == d else 0.0
+        ori_raw = features.get('orientation')
+        for o in SUPPORTED_ORIENTATIONS:
+            if f'ori_{o}' in feature_cols:
+                row[f'ori_{o}'] = 1.0 if ori_raw == o else 0.0
         X = np.array([[row[c] for c in feature_cols]], dtype=float)
         # 用带列名的 DataFrame 传入 scaler，避免 "X does not have valid feature names" 警告
         import pandas as pd
@@ -363,8 +497,13 @@ def predict_price(features: dict):
         xgb_p = model['xgb'].predict(Xs)
         rf_p = model['rf'].predict(Xs)
         blend_X = np.column_stack((xgb_p, rf_p))
-        pred = float(model['blend'].predict(blend_X)[0])
-        return {"predicted_price": round(pred, 2)}
+        pred_unit = float(model['blend'].predict(blend_X)[0])  # 模型预测单价（元/㎡）
+        area = features.get('area') or 0
+        total_wan = (pred_unit * float(area) / 10000.0) if area and float(area) > 0 else None
+        return {
+            "predicted_unit_price": round(pred_unit, 0),
+            "predicted_price": round(total_wan, 2) if total_wan is not None else None,
+        }
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"预测失败: {e}")
 
@@ -492,14 +631,27 @@ def dashboard_overview():
 
 @app.get("/api/dashboard/yearly_trend")
 def yearly_trend():
-    """年份房价走势"""
+    """年份房价走势。
+
+    房源覆盖多年的城市直接用真实成交均价；只覆盖单一年份的城市
+    （如上海仅有 2022 年成交明细），以该年真实均价为锚点，用国家
+    统计局 70 城二手住宅同比指数折算历年真实价格水平。
+    两类数据来源通过 data_sources 字段标明。
+    """
+    # 局部导入，避免模块加载时即引入 sklearn 等重依赖
+    from models.trend_predictor import TrendPredictor
+
     db = SessionLocal()
     try:
+        # 样本量过少的年份均价不具统计意义，与趋势模型保持一致的过滤口径
+        min_samples = TrendPredictor.min_year_samples
         data = db.query(
             House.year, House.city,
             func.avg(House.price).label('avg_price'),
             func.count(House.id).label('cnt')
-        ).filter(House.year > 0).group_by(House.year, House.city).order_by(House.year).all()
+        ).filter(House.year > 0).group_by(
+            House.year, House.city
+        ).having(func.count(House.id) >= min_samples).order_by(House.year).all()
         
         result = {}
         for row in data:
@@ -510,8 +662,52 @@ def yearly_trend():
                 "avg_price": round(float(row.avg_price), 2),
                 "count": row.cnt
             })
-        
-        return {"yearly_trends": result}
+
+        # 单年城市用官方指数折算补全历年走势
+        sources = {}
+        predictor = get_trend_predictor()
+        for city, series in list(result.items()):
+            if len(series) >= 2:
+                sources[city] = "真实成交"
+                continue
+            # 单年城市：尝试用官方指数折算补全历年走势；
+            # 既无多年成交、也无指数数据的，如实标注为单年真实快照
+            if predictor is None or len(series) == 0:
+                sources[city] = "真实成交（单年）"
+                continue
+            anchor = series[0]
+            adjusted = predictor.index_adjusted_series(
+                city, anchor["year"], anchor["avg_price"]
+            )
+            if len(adjusted) >= 2:
+                result[city] = [
+                    {
+                        "year": item["year"],
+                        "avg_price": item["price"],
+                        "count": anchor["count"] if item["year"] == anchor["year"] else None
+                    }
+                    for item in adjusted
+                ]
+                sources[city] = "官方指数折算"
+            else:
+                # 本城无官方指数，尝试邻城指数代理补全历年走势
+                nb_series, nb = predictor.neighbor_index_adjusted_series(
+                    city, anchor["year"], anchor["avg_price"]
+                )
+                if len(nb_series) >= 2:
+                    result[city] = [
+                        {
+                            "year": item["year"],
+                            "avg_price": item["price"],
+                            "count": anchor["count"] if item["year"] == anchor["year"] else None
+                        }
+                        for item in nb_series
+                    ]
+                    sources[city] = "邻城指数代理"
+                else:
+                    sources[city] = "真实成交（单年）"
+
+        return {"yearly_trends": result, "data_sources": sources}
     finally:
         db.close()
 
@@ -525,6 +721,8 @@ def get_predict_config():
         "cities": ALL_CITIES,
         "layouts": SUPPORTED_LAYOUTS,
         "floors": SUPPORTED_FLOORS,
+        "decorations": SUPPORTED_DECORATIONS,
+        "orientations": SUPPORTED_ORIENTATIONS,
         "source": "utils/constants.py",
     }
 

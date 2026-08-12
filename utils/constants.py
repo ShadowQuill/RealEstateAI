@@ -42,6 +42,12 @@ CITY_URL_MAP = {
     '珠海': 'zh',
     '哈尔滨': 'hrb',
     '南宁': 'nn',
+    # 中小城市（贝壳有分站、已实测可返回真实房源）
+    '中山': 'zs', '温州': 'wz', '石家庄': 'sjz', '南昌': 'nc', '贵阳': 'gy',
+    '兰州': 'lz', '海口': 'hk', '太原': 'ty', '南通': 'nt', '嘉兴': 'jx',
+    '保定': 'bd', '烟台': 'yt', '潍坊': 'wf', '扬州': 'yz', '镇江': 'zj',
+    '唐山': 'ts', '廊坊': 'lf', '襄阳': 'xy', '泉州': 'quanzhou', '泰州': 'taizhou',
+    '芜湖': 'wuhu', '赣州': 'ganzhou', '湛江': 'zhanjiang', '绍兴': 'sx', '昆山': 'ks',
 }
 
 # 特征列顺序依赖此列表，调整顺序需重新训练模型
@@ -56,6 +62,11 @@ DEFAULT_FLOOR = '中楼层'
 # 模型与 API 支持的户型类别
 SUPPORTED_LAYOUTS = ['2室1厅', '3室1厅', '3室2厅']
 SUPPORTED_FLOORS = ['低楼层', '中楼层', '高楼层']
+
+# 模型与 API 支持的装修类别（对应 House.decoration）
+SUPPORTED_DECORATIONS = ['精装', '简装', '毛坯', '其他']
+# 模型与 API 支持的朝向类别（对应 House.orientation；缺失/未知统一编码为全 0）
+SUPPORTED_ORIENTATIONS = ['南', '南北', '东南', '东', '西南', '北', '西', '东北', '西北']
 
 # 原始户型 -> 受支持户型 的归一映射
 LAYOUT_MAP = {
@@ -111,4 +122,6 @@ def build_feature_cols():
     cols += [f'city_{c}' for c in ALL_CITIES]
     cols += [f'layout_{l}' for l in SUPPORTED_LAYOUTS]
     cols += [f'floor_info_{f}' for f in SUPPORTED_FLOORS]
+    cols += [f'dec_{d}' for d in SUPPORTED_DECORATIONS]
+    cols += [f'ori_{o}' for o in SUPPORTED_ORIENTATIONS]
     return cols

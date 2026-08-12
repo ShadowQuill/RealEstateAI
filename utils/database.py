@@ -32,6 +32,7 @@ class House(Base):
     orientation = Column(String, nullable=True)      # 朝向
     decoration = Column(String, nullable=True)       # 装修情况
     building_year = Column(Integer, nullable=True)   # 建成年份
+    property_type = Column(String, index=True, default='二手房')  # 房源类型：二手房 / 新房
     description = Column(Text, nullable=True)        # 房源描述
     url = Column(String, unique=True)
     crawled_at = Column(DateTime, default=datetime.datetime.now)
@@ -58,6 +59,7 @@ def migrate_db():
         'rooms': 'String',
         'orientation': 'String',
         'decoration': 'String',
+        'property_type': 'String',
         'description': 'Text',
         'crawled_at': 'DateTime',
     }
@@ -88,6 +90,33 @@ def migrate_db():
                 print(f"  ⚠️ 未能移除 layout 列（可忽略）: {e}")
 
         print("✅ 数据库迁移完成")
+
+
+class CityIndex(Base):
+    """国家统计局 70 城房价指数（新房/二手房，月度，同比/环比）。
+
+    数据源：hugohe3/70cityprice（国家统计局官方发布）。
+    与 House 房源级数据不同，这是城市级价格指数，用于新房/二手房
+    走势对比与政策影响分析（新房挂牌价 ≠ 成交价，受政策影响大）。
+    """
+    __tablename__ = "city_index"
+    id = Column(Integer, primary_key=True, index=True)
+    city = Column(String, index=True)
+    adcode = Column(String, nullable=True)
+    year = Column(Integer, index=True)
+    month = Column(Integer, index=True)
+    date_str = Column(String)                 # 原始日期，如 2006/1/1
+    base_type = Column(String, index=True)    # 同比 / 环比
+    house_idx = Column(Float, nullable=True)          # 新建住宅价格指数
+    resident_idx = Column(Float, nullable=True)       # 二手住宅价格指数（总）
+    commodity_idx = Column(Float, nullable=True)      # 新房（商品住宅）指数
+    secondhand_idx = Column(Float, nullable=True)    # 二手房指数
+    commodity_below90 = Column(Float, nullable=True)
+    commodity_144 = Column(Float, nullable=True)
+    commodity_above144 = Column(Float, nullable=True)
+    secondhand_below90 = Column(Float, nullable=True)
+    secondhand_144 = Column(Float, nullable=True)
+    secondhand_above144 = Column(Float, nullable=True)
 
 
 if __name__ == "__main__":
