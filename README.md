@@ -91,7 +91,7 @@ python run_system.py
 - 初始化数据库；
 - 若缺少模型文件（`xgb_model.pkl` / `rf_model.pkl` / `blend_model.pkl` / `trend_predictor.pkl`）则自动训练；
 - 启动 FastAPI 后端（默认 `http://127.0.0.1:8000`）；
-- 启动 Flask 看板（默认 `http://127.0.0.1:8050`）；
+- 启动 Dash 看板（默认 `http://127.0.0.1:8050`）；
 - 构建并预览 React 前端（开发模式 `http://localhost:5173`，生产静态文件由 API 挂载）。
 
 前端独立开发预览也可：
@@ -182,8 +182,8 @@ Cookie 存于 `data/raw/lianjia_cookies.json`（已被 `.gitignore` 忽略）。
 ## 技术栈
 
 - **后端**：FastAPI、SQLAlchemy、pandas、scikit-learn、XGBoost
-- **数据采集**：requests、BeautifulSoup、lxml、Playwright（浏览器成交抓取）
-- **可视化**：Flask、Plotly (Dash)
+- **数据采集**：requests、BeautifulSoup、lxml、Playwright（浏览器成交抓取）、Playwright（浏览器成交抓取）
+- **可视化**：Dash、Plotly
 - **前端**：React、Vite、Tailwind CSS、Recharts、Radix UI
 - **NLP**：sentence-transformers
 
