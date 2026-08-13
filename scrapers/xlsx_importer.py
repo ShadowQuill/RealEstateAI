@@ -85,7 +85,7 @@ def import_source(src, clear=False):
             rooms TEXT, floor_info TEXT, orientation TEXT,
             decoration TEXT, building_year INTEGER,
             property_type TEXT DEFAULT '二手房',
-            description TEXT, url TEXT UNIQUE, crawled_at TEXT, created_at TEXT
+            description TEXT, url TEXT UNIQUE, deal_id TEXT, crawled_at TEXT, created_at TEXT
         )"""
     )
     if clear:

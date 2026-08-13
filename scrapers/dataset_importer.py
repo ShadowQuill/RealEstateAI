@@ -140,7 +140,7 @@ def ensure_table(conn):
             decoration TEXT, building_year INTEGER,
             property_type TEXT DEFAULT '二手房',
             description TEXT,
-            url TEXT UNIQUE, crawled_at TEXT, created_at TEXT
+            url TEXT UNIQUE, deal_id TEXT, crawled_at TEXT, created_at TEXT
         )"""
     )
 

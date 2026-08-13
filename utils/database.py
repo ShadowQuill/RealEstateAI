@@ -1,6 +1,6 @@
 # utils/database.py
 import os
-from sqlalchemy import create_engine, Column, String, Float, Integer, DateTime, Text
+from sqlalchemy import create_engine, Column, String, Float, Integer, DateTime, Text, text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 import datetime
@@ -35,6 +35,7 @@ class House(Base):
     property_type = Column(String, index=True, default='二手房')  # 房源类型：二手房 / 新房
     description = Column(Text, nullable=True)        # 房源描述
     url = Column(String, unique=True)
+    deal_id = Column(String, nullable=True, index=True)  # 真实房源ID，用于精准去重
     crawled_at = Column(DateTime, default=datetime.datetime.now)
     created_at = Column(DateTime, default=datetime.datetime.now)
 
@@ -44,6 +45,19 @@ def init_db():
     if db_dir and not os.path.exists(db_dir):
         os.makedirs(db_dir, exist_ok=True)
     Base.metadata.create_all(bind=engine)
+    # 固化去重索引（兼容已有库：缺列先补，索引幂等建）
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE houses ADD COLUMN deal_id VARCHAR"))
+        except Exception:
+            pass
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_houses_dealid "
+            "ON houses(city, deal_id) WHERE deal_id IS NOT NULL"))
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_houses_dedup "
+            "ON houses(city, community, year, price, area, COALESCE(rooms,''))"))
+        conn.commit()
     print(f"✅ 数据库初始化成功！文件位置: {DB_PATH}")
 
 

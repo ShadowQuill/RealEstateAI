@@ -160,10 +160,18 @@ def extract_card(card):
         # 单价兜底：用总价(万)/面积 折算
         if unit is None and price and area:
             unit = price * 10000.0 / area
+        # 真实房源ID：从成交详情链接解析（用于精准去重，避免合成 url 无法判重）
+        deal_id = None
+        if title_a:
+            href = title_a.get_attribute("href") or ""
+            m = re.search(r"/chengjiao/([^/]+?)\.html", href) or re.search(r"/chengjiao/(\w+)", href)
+            if m:
+                deal_id = m.group(1)
         return {
             "title": title, "community": community, "price": price, "unit_price": unit,
             "year": year, "area": area, "rooms": rooms, "orientation": orientation,
             "decoration": decoration, "floor_info": floor_info, "building_year": building_year,
+            "deal_id": deal_id,
         }
     except Exception:
         return None
@@ -180,11 +188,11 @@ def insert_batch(db, city, rows):
                 """INSERT OR IGNORE INTO houses
                    (city, region, community, year, title, price, unit_price, area, rooms,
                     floor_info, orientation, decoration, building_year,
-                    property_type, description, url, crawled_at, created_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    property_type, description, url, deal_id, crawled_at, created_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (city, None, r["community"], r["year"], r["title"], r["price"], r["unit_price"],
                  r["area"], r["rooms"], r["floor_info"], r["orientation"], r["decoration"],
-                 r["building_year"], "二手房成交", r["title"], url, now, now),
+                 r["building_year"], "二手房成交", r["title"], url, r.get("deal_id"), now, now),
             )
             n += 1
         except Exception:
