@@ -288,7 +288,7 @@ export const api = {
   // ===== 新房 / 二手房指数（国家统计局 70 城）=====
   getIndexCities: () => fetchAPI<{ cities: IndexCityInfo[]; total: number }>('/api/index/cities'),
   getCityIndex: (city: string, base_type = '同比') =>
-    fetchAPI<CityIndexSeries>(`/api/index/${encodeURIComponent(city)}?base_type=${base_type}`),
+    fetchAPI<CityIndexSeries>(`/api/index/city/${encodeURIComponent(city)}?base_type=${base_type}`),
   getIndexCompare: (cities: string[], base_type = '同比', metric = 'commodity_idx') =>
     fetchAPI<IndexCompareResult>(
       `/api/index/compare?cities=${encodeURIComponent(cities.join(','))}&base_type=${base_type}&metric=${metric}`

@@ -23,6 +23,10 @@
   python scrapers/chengjiao_browser.py --test                     # 只测默认首城(中山)一页，dump选择器
   python scrapers/chengjiao_browser.py --cities 中山 --test       # 同上，指定城市
   python scrapers/chengjiao_browser.py --cities 中山 --human      # 遇验证码暂停，手动完成后继续
+  python scrapers/chengjiao_browser.py --cities 东莞 --start-page 4 --pages 30 --human  # 扩量：跳过已抓页，抓新页
+  python scrapers/chengjiao_browser.py --cities 东莞 --start-page 24 --pages 30 --human --fast  # 快速模式续抓
+  python scrapers/chengjiao_browser.py --cities 佛山 --year 2025 --pages 5 --human  # 补足历史年成交(解锁趋势真实成交)：仅返回2025成交，每城1-3页即可
+  python scrapers/chengjiao_browser.py --cities 佛山,苏州 --sdate 2025-01-01 --bdate 2025-06-30 --pages 5 --human  # 指定日期区间
   python scrapers/chengjiao_browser.py --headless                # 无头模式(服务器用，更易被风控)
 
 前置(必须有)：先运行 python scrapers/save_cookies.py 导出已登录 lianjia.com 的 cookie，
@@ -126,11 +130,11 @@ def extract_card(card):
         m_rooms = re.search(r"(\d+)\s*室\s*(\d+)\s*厅", title)
         if m_rooms:
             rooms = f"{m_rooms.group(1)}室{m_rooms.group(2)}厅"
-        # 总价（万）
-        tp = card.query_selector(".totalPrice span")
+        # 总价（万）—— 兼容「有内层 span」与「直接写在 .totalPrice 内」两种结构
+        tp = card.query_selector(".totalPrice span") or card.query_selector(".totalPrice")
         price = to_float(tp.inner_text()) if tp else None
-        # 单价（元/平）
-        up = card.query_selector(".unitPrice")
+        # 单价（元/平）—— 同上，兼容有无内层 span
+        up = card.query_selector(".unitPrice span") or card.query_selector(".unitPrice")
         unit = to_float(up.inner_text()) if up else None
         # 成交日期
         dd = card.query_selector(".dealDate")
@@ -155,7 +159,8 @@ def extract_card(card):
             elif re.search(r"\d{4}年", p) or re.match(r"^\d{4}$", p):
                 by = re.search(r"(\d{4})", p)
                 building_year = int(by.group(1)) if by else None
-        if price is None or area is None or area <= 0 or year is None:
+        # 价格允许缺失（异步渲染/部分城市结构差异），但面积与年份为趋势模型必需，缺一不可
+        if area is None or area <= 0 or year is None:
             return None
         # 单价兜底：用总价(万)/面积 折算
         if unit is None and price and area:
@@ -201,13 +206,16 @@ def insert_batch(db, city, rows):
     return n
 
 
-def fetch_city(context, city, code, max_pages, test=False, human=False):
+def fetch_city(context, city, code, max_pages, test=False, human=False, start_page=1, fast=False, sdate=None, bdate=None, area=None):
     page = context.new_page()
     saved = 0
-    pg = 1
+    pg = start_page
     resumed = False  # 手动过验证后跳过重新 goto，直接复用已渲染的当前页
+    scope = f"/{area}" if area else ""
     while pg <= max_pages:
-        url = f"https://{code}.lianjia.com/chengjiao/pg{pg}/"
+        url = f"https://{code}.lianjia.com/chengjiao{scope}/pg{pg}/"
+        if sdate and bdate:
+            url += f"?sDate={sdate}&bDate={bdate}"  # 年份/日期筛选：直接返回该时段成交，避免深翻
         if not resumed:
             try:
                 page.goto(url, timeout=30000, wait_until="domcontentloaded")
@@ -265,12 +273,61 @@ def fetch_city(context, city, code, max_pages, test=False, human=False):
             except Exception:
                 pass
             break
-        page.wait_for_timeout(1500)  # 兜底等懒加载图片/卡片补齐
+        # 价格/日期可能异步晚于标题渲染，先等它们出现（城市间结构差异大，超时即放手让 extract_card 兜底）
+        for sel in (".totalPrice", ".dealDate", ".unitPrice"):
+            try:
+                page.wait_for_selector(f".listContent li {sel}, .house-lst li {sel}", timeout=6000)
+            except Exception:
+                pass
+        page.wait_for_timeout(500 if fast else 1500)  # 兜底等懒加载图片/卡片补齐（fast 缩短）
         cards = page.query_selector_all(".listContent li, .house-lst li")
         if test:
             print(f"  [TEST] {city} pg{pg}: 卡片数={len(cards)} url={page.url[:60]}")
             if cards:
                 print("  首卡HTML:", cards[0].inner_html()[:800])
+            # 打印时间/筛选相关的链接，帮助定位正确的年份筛选 URL（链家用 co 条件码而非 query 参数）
+            # 用 textContent 抓隐藏(折叠下拉)选项的文本
+            try:
+                import re as _re
+                anchors = page.query_selector_all("a[href*='chengjiao']")
+                seen = set()
+                for a in anchors:
+                    t = (a.get_attribute("textContent") or a.inner_html() or "").strip()
+                    h = a.get_attribute("href") or ""
+                    if _re.search(r"2025|2024|2023|时间|不限|近\s*\d+\s*月", t) and h not in seen:
+                        seen.add(h)
+                        print(f"  [FILTER-LINK] text={t!r} href={h}")
+            except Exception as e:
+                print("  filter-link 提取失败:", e)
+            # 打印所有下拉容器 HTML，暴露自定义下拉里的年份选项
+            try:
+                for sel in (".dropdown", "div[class*='dropdown']", "div[class*='time']",
+                            "div[class*='sort']", "ul[class*='dropdown']", "div[class*='select']",
+                            ".list-box", ".sort"):
+                    for el in page.query_selector_all(sel):
+                        html = el.inner_html() or ""
+                        if ("2025" in html) or ("2024" in html) or ("时间" in html) or ("近" in html and "月" in html):
+                            print(f"  [DROPDOWN {sel}]", html[:1500].replace("\n", " "))
+            except Exception as e:
+                print("  dropdown 提取失败:", e)
+            try:
+                for sel in (".filters", ".screen", ".filter", "div[class*='filter']", ".list-box", ".sec-bottom"):
+                    el = page.query_selector(sel)
+                    if el:
+                        print(f"  [FILTER-HTML {sel}]", el.inner_html()[:600].replace("\n", " "))
+            except Exception:
+                pass
+            # 专门打印所有 <select> 下拉及其选项（成交时间筛选通常是 select）
+            try:
+                selects = page.query_selector_all("select")
+                for si, s in enumerate(selects):
+                    cls = s.get_attribute("class") or ""
+                    name = s.get_attribute("name") or ""
+                    print(f"  [SELECT #{si}] class={cls!r} name={name!r}")
+                    for o in s.query_selector_all("option"):
+                        print(f"      option value={o.get_attribute('value')!r} text={o.inner_text().strip()!r}")
+            except Exception as e:
+                print("  select 提取失败:", e)
             page.close()
             return 0
         rows = [extract_card(c) for c in cards]
@@ -279,12 +336,24 @@ def fetch_city(context, city, code, max_pages, test=False, human=False):
             print(f"  {city} pg{pg} 无有效卡片，停  url={page.url[:70]}")
             cards0 = page.query_selector_all(".listContent li, .house-lst li")
             if cards0:
-                print("  首卡HTML:", cards0[0].inner_html()[:600])
+                c0 = cards0[0]
+                tp = c0.query_selector(".totalPrice span") or c0.query_selector(".totalPrice")
+                dd = c0.query_selector(".dealDate")
+                print("  诊断 首卡: "
+                      f"title={c0.query_selector('.title a').inner_text()[:30] if c0.query_selector('.title a') else None!r} "
+                      f"totalPrice={tp.inner_text() if tp else None!r} "
+                      f"dealDate={dd.inner_text() if dd else None!r}")
+                try:
+                    with open(os.path.join(RAW_DIR, f"debug_{city}_pg{pg}_card.html"), "w", encoding="utf-8") as fh:
+                        fh.write(c0.inner_html())
+                    print(f"  📝 已dump首卡完整HTML -> data/raw/debug_{city}_pg{pg}_card.html")
+                except Exception:
+                    pass
             break
         saved += insert_batch(db_conn(), city, rows)
         print(f"    {city} pg{pg}: +{len(rows)} (累计 {saved})")
         pg += 1
-        time.sleep(random.uniform(8.0, 15.0))  # 拉长间隔，降低封号概率
+        time.sleep(random.uniform(2.0, 4.0) if fast else random.uniform(8.0, 15.0))  # 页间间隔（fast 提速）
     page.close()
     return saved
 
@@ -303,13 +372,24 @@ def db_conn():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cities", default="", help="限定城市(中文逗号分隔)，默认全部单年城市")
-    ap.add_argument("--pages", type=int, default=15, help="每城最多页数")
+    ap.add_argument("--pages", type=int, default=15, help="每城最多页数(上限)")
+    ap.add_argument("--start-page", type=int, default=1, help="起始页(默认1)；扩量重跑时设 4 跳过已抓页、避免重复触发验证码")
     ap.add_argument("--test", action="store_true", help="只加载首城首页并dump选择器，用于调参")
     ap.add_argument("--human", action="store_true", help="遇验证码暂停，等手动完成验证后再继续")
     ap.add_argument("--headless", action="store_true", help="无头模式(默认有头，更易过风控/手动验证)")
+    ap.add_argument("--fast", action="store_true", help="快速模式：页间间隔 8-15s→2-4s、城市间 5-10s→2-3s（换新号/赶进度时用，封号风险略增）")
+    ap.add_argument("--year", type=int, default=0, help="限定成交年份(如 2025)；自动设 sDate/bDate 为该年1/1-12/31（链家已证实忽略此参数，请用 --area 深翻）")
+    ap.add_argument("--sdate", default="", help="成交起始日期 YYYY-MM-DD（与 --bdate 配套；链家成交页忽略 query 参数）")
+    ap.add_argument("--bdate", default="", help="成交截止日期 YYYY-MM-DD")
+    ap.add_argument("--area", default=None, help="按区域/街道细分，如 chancheng/nanhai/shunde（突破单城100页上限，深翻到历史年）")
     args = ap.parse_args()
     if args.test and not args.cities:
         args.cities = "中山"  # 单测默认首城
+
+    # 年份/日期筛选参数解析（用于补足历史年成交）
+    sdate, bdate = args.sdate, args.bdate
+    if (not sdate) and args.year:
+        sdate, bdate = f"{args.year}-01-01", f"{args.year}-12-31"
 
     cities = SINGLE_YEAR_CITIES
     if args.cities:
@@ -345,12 +425,12 @@ def main():
             for i, (city, code) in enumerate(cities.items(), 1):
                 print(f"\n🏙️ [{i}/{len(cities)}] {city}({code})")
                 try:
-                    n = fetch_city(context, city, code, args.pages, test=args.test, human=args.human)
+                    n = fetch_city(context, city, code, args.pages, test=args.test, human=args.human, start_page=args.start_page, fast=args.fast, sdate=sdate, bdate=bdate, area=args.area)
                     total += n
                     print(f"  ✅ {city}: 新增 {n} 条真实成交")
                 except Exception as e:
                     print(f"  ⚠️ {city} 中断: {e}")
-                time.sleep(random.uniform(5.0, 10.0))  # 城市间也拉长间隔
+                time.sleep(random.uniform(2.0, 3.0) if args.fast else random.uniform(5.0, 10.0))  # 城市间间隔（fast 提速）
                 if args.test:
                     break
         finally:

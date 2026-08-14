@@ -141,13 +141,13 @@ export default function DashboardPage() {
             <ChartContainer height={320} resetKey={overview?.price_area_scatter?.length ?? 0}>
               <ScatterChart margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis type="number" dataKey="area" name="面积" unit="㎡" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                <YAxis type="number" dataKey="price" name="总价" unit="万" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                <XAxis type="number" dataKey="area" name="面积" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                <YAxis type="number" dataKey="price" name="总价" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                 <Tooltip
                   contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }}
                   labelStyle={{ color: 'hsl(var(--card-foreground))' }}
                   itemStyle={{ color: 'hsl(var(--card-foreground))' }}
-                  formatter={(value: number, name: string) => [name === 'price' ? `${value}万` : `${value}㎡`, name === 'price' ? '总价' : '面积']}
+                  formatter={(value: number, name: string) => [name === '总价' ? `${value} 万` : `${value} ㎡`, name]}
                 />
                 <Scatter data={overview?.price_area_scatter?.slice(0, 2000) || []} fill="hsl(var(--primary) / 0.6)" />
               </ScatterChart>

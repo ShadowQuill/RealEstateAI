@@ -49,7 +49,7 @@ RealEstateAI/
 ├── data/raw/                  # Cookie 等凭证（已被 .gitignore 忽略）
 ├── cache/                     # 缓存目录（NLP 模型 / AI 问答 / 分析结果缓存）
 ├── log/                       # 日志目录
-├── run_system.py              # 一键启动脚本：API + 看板 + 前端构建/预览
+├── run_system.py              # 一键启动脚本：API + 看板 + 前端（--with-frontend）；--stop 干净停止
 ├── run_update.py              # 数据更新脚本：爬取 + 训练 + 趋势模型（会清空 houses 表）
 ├── run_update_real.py         # 保留现有真实数据重训价格/趋势模型（推荐）
 ├── requirements.txt           # Python 依赖清单
@@ -78,11 +78,13 @@ models/*.pkl   ->  api/main.py  ->  dashboard + frontend 展示
 
 主要入口脚本
 ------------
-- python run_system.py        ：启动完整系统（训练缺失模型时自动训练、拉起 API/看板、构建前端）
+- python run_system.py --with-frontend ：启动完整系统（训练缺失模型时自动训练、拉起 API/看板、一并启动前端）
+- python run_system.py --stop          ：干净停止全部相关服务（含残留管理主进程）
 - python run_update_real.py   ：保留真实数据，重新训练价格与趋势模型（推荐）
 - python run_update.py        ：更新房源数据并重新训练（会清空 houses 表，慎用）
 - python scrapers/save_cookies.py   ：浏览器登录导出 Cookie
-- python scrapers/chengjiao_browser.py --cities 中山 --human --pages 3 ：浏览器抓取成交
+- python scrapers/chengjiao_browser.py --cities 中山 --human --pages 3 --area chancheng --fast ：浏览器抓取成交
+  （--start-page 跳已抓页、--fast 提速、--area 按区深翻突破 100 页上限；--year/--sdate/--bdate 链家已忽略）
 
 核心 API 接口（FastAPI，默认 http://127.0.0.1:8000）
 ---------------------------------------------------
@@ -95,7 +97,7 @@ models/*.pkl   ->  api/main.py  ->  dashboard + frontend 展示
 - GET  /api/predict/city_trend/{city}      : 城市历史趋势与未来 N 年预测（含数据源）
 - POST /api/predict/listing_future         : 单房源未来价格预测
 - GET  /api/index/cities                   : 70 城房价指数城市列表
-- GET  /api/index/{city}                   : 指定城市历年新房/二手房指数
+- GET  /api/index/city/{city}              : 指定城市历年新房/二手房指数
 - GET  /api/index/compare                  : 多城指数对比
 - GET  /api/config/predict                 : 价格预测可选配置（户型/装修/朝向等）
 - POST /api/analyze/text                   : NLP 文本分析（价格提取、虚假宣传检测等）

@@ -84,7 +84,7 @@ HF_ENDPOINT=https://hf-mirror.com
 ### 3. 运行完整系统
 
 ```bash
-python run_system.py
+python run_system.py --with-frontend
 ```
 
 该脚本会：
@@ -92,7 +92,18 @@ python run_system.py
 - 若缺少模型文件（`xgb_model.pkl` / `rf_model.pkl` / `blend_model.pkl` / `trend_predictor.pkl`）则自动训练；
 - 启动 FastAPI 后端（默认 `http://127.0.0.1:8000`）；
 - 启动 Dash 看板（默认 `http://127.0.0.1:8050`）；
-- 构建并预览 React 前端（开发模式 `http://localhost:5173`，生产静态文件由 API 挂载）。
+- **`--with-frontend` 一并启动 React 前端**（开发模式 `http://localhost:5173`）。
+
+常用参数：
+
+| 参数 | 说明 |
+|------|------|
+| `--with-frontend` | 一键拉起 后端 + 看板 + 前端（不加则只起后端与看板，前端需手动 `cd frontend && npm run dev`） |
+| `--stop` | 干净停止全部相关服务（按端口精确 kill，含残留的管理主进程） |
+| `--no-autokill` | 端口被占用时**不**自动释放占用进程（默认会自动 kill 占用者再启动） |
+
+> 启动完成后，输出会以醒目方式标出前端地址（`http://localhost:5173`），即网页界面入口。
+> 端口被占用时会自动终止占用进程；如需在新实例中重新接管，新 `run_system.py` 启动时会先停掉旧的管理主进程。
 
 前端独立开发预览也可：
 
@@ -122,6 +133,17 @@ python scrapers/save_cookies.py
 # 2) 用 Cookie 抓取成交（有头模式 + --human 遇验证码可手动过）
 python scrapers/chengjiao_browser.py --cities 中山 --human --pages 3
 ```
+
+常用参数：
+
+| 参数 | 说明 |
+|------|------|
+| `--start-page N` | 起始页（默认 1）；扩量重跑设 4 可跳过已抓页、避免重复触发验证码 |
+| `--fast` | 快速模式：页间 8–15s→2–4s、城间 5–10s→2–3s（换新号/赶进度时用，封号风险略增） |
+| `--area AREA` | 按区域/街道细分（如 `chancheng`/`nanhai`/`shunde`）突破单城 100 页上限，深翻到历史年份 |
+| `--year/--sdate/--bdate` | 限定成交年份或日期范围；链家成交页已证实**忽略**这些 query 参数，请改用 `--area` 深翻 |
+
+> ⚠️ 大量历史成交链家公开显示「暂无价格」（数据策略，非爬虫 bug），抓到的 `price=NULL` 行对价格模型无贡献，会被清理。
 
 Cookie 存于 `data/raw/lianjia_cookies.json`（已被 `.gitignore` 忽略）。
 
@@ -159,7 +181,7 @@ Cookie 存于 `data/raw/lianjia_cookies.json`（已被 `.gitignore` 忽略）。
 | GET  | `/api/predict/city_trend/{city}` | 城市历史趋势与未来 N 年预测（含数据源） |
 | POST | `/api/predict/listing_future` | 单房源未来价格预测 |
 | GET  | `/api/index/cities` | 70 城房价指数城市列表 |
-| GET  | `/api/index/{city}` | 指定城市历年新房/二手房指数 |
+| GET  | `/api/index/city/{city}` | 指定城市历年新房/二手房指数 |
 | GET  | `/api/index/compare` | 多城指数对比 |
 | GET  | `/api/config/predict` | 价格预测可选配置（户型/装修/朝向等） |
 | POST | `/api/analyze/text` | NLP 文本分析（价格提取、虚假宣传检测等） |
@@ -176,6 +198,28 @@ Cookie 存于 `data/raw/lianjia_cookies.json`（已被 `.gitignore` 忽略）。
 - **价格预测模型**（`models/train.py`）：以城市、面积、房龄、户型、楼层、**装修、朝向**等特征训练 XGBoost 与 RandomForest，再做加权融合（`blend_model.pkl`）。特征标准化器 `scaler.pkl` 与特征列顺序 `feature_cols.pkl` 与 API 端严格一致。
 - **趋势预测模型**（`models/trend_predictor.py`）：对每个城市按年份聚合均价，使用二次多项式回归拟合趋势，预测未来房价与年化增长率，保存为 `trend_predictor.pkl`；按城市可用数据在「真实成交 / 官方指数折算 / 邻城指数代理 / 单年兜底」四类数据源间自动路由。
 - **AI 分析模型**（`nlp_module/ai_analyzer.py`）：基于 `sentence-transformers` 加载 `paraphrase-multilingual-MiniLM-L12-v2` 模型，结合正则匹配进行成交价/单价提取、语义相似度虚假宣传检测、区域与特征提取、情感分析，生成综合分析报告。
+
+### 各城训练样本量与准确性档位
+
+价格预测模型（融合 R² ≈ 0.65）的训练集由「内置 CSV 历史数据 + 浏览器抓取的链家成交」共同构成。54 城的**有价成交样本量极度不均**，直接决定各城价格预测的可靠性。库内当前有价样本分布（部分城市样例）：
+
+| 档位 | 城市 | 有价样本量 | 价格预测可靠性 |
+|------|------|-----------|---------------|
+| **精确（强）** | 北京 | ~311,000 | ✅ 极高 |
+| | 成都 | ~116,000 | ✅ 极高 |
+| | 上海 | ~90,000 | ✅ 极高 |
+| **较准（中）** | 中山 | 2,317 | ✅ 高 |
+| | 潍坊 | 598 | ✅ 可用 |
+| | 保定 | 483 | ✅ 可用 |
+| | 珠海 | 295 | ✅ 可用 |
+| **粗略（弱）** | 其余 46 城（含东莞、佛山、苏州、昆山、南通、嘉兴、廊坊、绍兴、芜湖、镇江 等新抓城市） | 每城 30–37 | ⚠️ 仅能粗略估计 |
+
+**关键说明：**
+
+- **整体 R² ≈ 0.65 主要由北京 / 成都 / 上海三大样本池（占全库 99% 以上）驱动**；这三个核心城市的价格预测已相当精确，是产品主力能力。
+- **弱样本档位（46 城，每城约 30 条）是产品的「最小样本基线」**，并非漏抓。这些城市多为二三线及新城，链家对大量历史成交**公开显示「暂无价格」**（数据策略，非爬虫 bug），故可获取的有价成交天然稀少。
+- **趋势预测不受样本量限制**：趋势模型使用国家统计局 70 城房价指数（每城 10 年），与成交样本量无关，54 城趋势判断天然准确。
+- **补充成交价对弱样本档位无实质提升**：对东莞 / 佛山 / 苏州等不公开成交价的城市，反复爬取得到的仍是 `price=NULL` 的废料；要提升这些城市的价格预测，唯一出路是用**在售页 `ershoufang` 挂牌价近似**（挂牌价 ≠ 成交价，会引入系统性偏差，默认不启用）。
 
 ---
 

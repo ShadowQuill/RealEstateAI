@@ -389,7 +389,7 @@ def get_index_cities():
         db.close()
 
 
-@app.get("/api/index/{city}")
+@app.get("/api/index/city/{city}")
 def get_city_index(
     city: str,
     base_type: str = Query("同比", pattern="^(同比|环比)$"),

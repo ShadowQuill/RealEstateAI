@@ -116,20 +116,51 @@ export default function NewHousePage() {
         </p>
       </div>
 
-      {/* 政策说明 */}
-      <Card className="border border-amber-500/30 bg-amber-500/5">
-        <CardContent className="p-4 flex gap-3">
-          <Info className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
-          <div className="text-sm text-muted-foreground space-y-1">
-            <p>
-              <span className="font-medium text-foreground">为什么新房看指数而非挂牌价？</span>
-              新房（一手房）的挂牌/备案价受<a className="text-primary">限价、摇号、地方调控</a>等政策影响，
-              挂牌价往往不等于真实成交价，且公开可获取的房源级真实成交数据极少。
-            </p>
-            <p>
-              国家统计局发布的「新建商品住宅价格指数」基于真实网签成交编制，是观察新房市场与
-              政策松紧最可靠的官方口径；下方同时叠加「二手住宅价格指数」以对比一二手市场温差。
-            </p>
+      {/* 指数解读 */}
+      <Card className="border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Info className="w-5 h-5 text-primary" /> 怎么看懂「价格指数」？
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 text-base text-foreground/90">
+          <p>
+            价格指数不是“每平米多少钱”，而是一把衡量<span className="font-semibold">“房价涨跌了多少”</span>的尺子：
+            把某个固定起点（基期）的房价设为 <span className="font-semibold text-primary">100</span>，之后只反映相对基期的变化。
+          </p>
+
+          {/* 直观刻度条 */}
+          <div className="rounded-lg border bg-background/60 p-4">
+            <div className="flex items-center justify-between text-sm text-muted-foreground mb-2">
+              <span>比基期便宜</span>
+              <span className="font-medium text-foreground">基期 = 100</span>
+              <span>比基期贵</span>
+            </div>
+            <div className="relative h-3 rounded-full bg-gradient-to-r from-emerald-500/70 via-muted to-rose-500/70">
+              <div className="absolute left-1/2 -translate-x-1/2 -top-1 w-0.5 h-5 bg-foreground/40" />
+            </div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground mt-2">
+              <span>&lt; 100（如 95 ≈ 跌 5%）</span>
+              <span>&gt; 100（如 105 ≈ 涨 5%）</span>
+            </div>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-3 text-sm leading-relaxed">
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+              <p className="font-medium mb-1">为什么新房看指数而不是房价？</p>
+              <p className="text-muted-foreground">
+                新房（一手房）的挂牌/备案价常受限价、摇号、地方调控影响，不等于真实成交价，
+                公开可拿到的房源级成交数据也很少。国家统计局的「新建商品住宅价格指数」基于真实网签成交编制，
+                是观察新房市场最可靠的官方口径。
+              </p>
+            </div>
+            <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 p-3">
+              <p className="font-medium mb-1">怎么看走势？</p>
+              <p className="text-muted-foreground">
+                「同比」= 和去年同月比；「环比」= 和上个月比。把「新房」与「二手房」两条线叠在一起，
+                能直观看出一、二手市场的“温差”。
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -190,25 +221,32 @@ export default function NewHousePage() {
                 <Skeleton className="h-[360px] w-full" />
               ) : (
                 <ChartContainer height={360} resetKey={`${selected}-${baseType}`}>
-                  <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 40 }}>
+                  <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 64 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis
                       dataKey="label" tick={{ fontSize: 10 }} minTickGap={24}
                       stroke="hsl(var(--muted-foreground))"
-                      angle={-45} textAnchor="end"
+                      angle={-45} textAnchor="end" height={56}
                     />
-                    <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" domain={['auto', 'auto']} />
-                    <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="新房" stroke="hsl(var(--primary))" dot={false} strokeWidth={2} connectNulls />
-                    <Line type="monotone" dataKey="二手房" stroke="#f97316" dot={false} strokeWidth={2} connectNulls />
+                    <YAxis
+                      tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" domain={['auto', 'auto']}
+                      label={{ value: '价格指数（基准=100）', angle: -90, position: 'insideLeft', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                    />
+                    <Tooltip
+                      contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }}
+                      labelStyle={{ color: 'hsl(var(--card-foreground))' }}
+                      itemStyle={{ color: 'hsl(var(--card-foreground))' }}
+                      formatter={(value: number, name: string) => [`${value}`, name]}
+                    />
+                    <Legend verticalAlign="top" height={28} />
+                    <Line type="monotone" dataKey="新房" name="新建商品住宅指数" stroke="hsl(var(--primary))" dot={false} strokeWidth={2} connectNulls />
+                    <Line type="monotone" dataKey="二手房" name="二手住宅指数" stroke="#f97316" dot={false} strokeWidth={2} connectNulls />
                   </LineChart>
                 </ChartContainer>
               )}
-              <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-4 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-primary inline-block" /> 新建商品住宅指数</span>
                 <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#f97316] inline-block" /> 二手住宅指数</span>
-                <span className="ml-auto">基准 100 = 该城市定基（以 2010 或 2015 为基期）</span>
               </div>
             </CardContent>
           </Card>
@@ -246,13 +284,14 @@ export default function NewHousePage() {
                 <Skeleton className="h-[300px] w-full" />
               ) : compareData && compareChartData.length ? (
                 <ChartContainer height={300} resetKey={`${compareCities.join(',')}-${compareMetric}-${baseType}`}>
-                  <LineChart data={compareChartData} margin={{ top: 10, right: 20, left: 0, bottom: 40 }}>
+                  <LineChart data={compareChartData} margin={{ top: 10, right: 20, left: 0, bottom: 64 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis dataKey="label" tick={{ fontSize: 10 }} minTickGap={30}
-                      stroke="hsl(var(--muted-foreground))" angle={-45} textAnchor="end" />
-                    <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" domain={['auto', 'auto']} />
+                      stroke="hsl(var(--muted-foreground))" angle={-45} textAnchor="end" height={56} />
+                    <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" domain={['auto', 'auto']}
+                      label={{ value: '价格指数（基准=100）', angle: -90, position: 'insideLeft', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
                     <Tooltip />
-                    <Legend />
+                    <Legend verticalAlign="top" height={28} />
                     {compareCities.map((city, i) => (
                       <Line
                         key={city} type="monotone" dataKey={city} dot={false} strokeWidth={2}
