@@ -1,12 +1,12 @@
-<p align="center">
-  <img src="docs/social_preview.png" alt="RealEstateAI 封面" width="100%"/>
-</p>
-
 # RealEstateAI - 房地产 AI 分析系统
 
 > **项目简介**：房地产 AI 分析系统：二手房价格预测、城市房价趋势研判与 AI 房源文本分析（54 城 + 国家统计局 70 城房价指数）
 
 > **Topics**：real-estate, house-price-prediction, machine-learning, xgboost, random-forest, time-series-forecast, trend-analysis, nlp, chinese-nlp, data-analysis, playwright, fastapi, react, dashboard
+
+<p align="center">
+  <img src="docs/social_preview.png" alt="RealEstateAI 封面" width="100%"/>
+</p>
 
 RealEstateAI 是一个完整的房地产 AI 分析系统，覆盖**数据采集 → 价格预测 → 趋势预测 → AI 智能分析**全链路，并提供 **React 前端**的可视化界面。系统支持 **54 个城市**（基于链家/贝壳二手房数据 + 国家统计局 70 城房价指数），能够：
 
