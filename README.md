@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/social_preview.png" alt="RealEstateAI 封面" width="100%"/>
+</p>
+
 # RealEstateAI - 房地产 AI 分析系统
 
 > **项目简介**：房地产 AI 分析系统：二手房价格预测、城市房价趋势研判与 AI 房源文本分析（54 城 + 国家统计局 70 城房价指数）
