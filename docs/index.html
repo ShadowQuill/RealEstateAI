@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RealEstateAI · 房地产 AI 分析系统</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --bg2: #0f1830;
+      --card: rgba(255, 255, 255, 0.04);
+      --border: rgba(120, 160, 255, 0.18);
+      --primary: #4f8cff;
+      --primary2: #f97316;
+      --text: #e8eefc;
+      --muted: #9fb0d0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background: radial-gradient(1200px 600px at 70% -10%, #16264d 0%, transparent 60%),
+        radial-gradient(900px 500px at 10% 10%, #1a2347 0%, transparent 55%), var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 56px 24px 64px; }
+    .badge {
+      display: inline-block; font-size: 13px; letter-spacing: .12em;
+      color: var(--primary); border: 1px solid var(--border);
+      padding: 4px 12px; border-radius: 999px; margin-bottom: 20px;
+      background: rgba(79, 140, 255, 0.08);
+    }
+    h1 {
+      font-size: 52px; font-weight: 800; letter-spacing: -0.02em;
+      background: linear-gradient(120deg, #ffffff, #9fc2ff 60%, #4f8cff);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .sub { font-size: 19px; color: var(--muted); margin-top: 10px; max-width: 720px; }
+    .hero-img {
+      margin: 36px 0; border-radius: 16px; overflow: hidden;
+      border: 1px solid var(--border); box-shadow: 0 20px 60px rgba(0, 0, 0, .45);
+    }
+    .hero-img img { width: 100%; display: block; }
+    .section-title { font-size: 22px; font-weight: 700; margin: 40px 0 18px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 18px 18px 20px;
+    }
+    .card .ic { font-size: 26px; }
+    .card h3 { font-size: 16px; margin: 10px 0 6px; }
+    .card p { font-size: 14px; color: var(--muted); }
+    .badges { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .tag {
+      font-size: 12px; color: var(--muted); border: 1px solid var(--border);
+      padding: 3px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.02);
+    }
+    .cta { margin-top: 36px; display: flex; flex-wrap: wrap; gap: 14px; }
+    .btn {
+      text-decoration: none; font-weight: 600; font-size: 15px;
+      padding: 12px 22px; border-radius: 10px; transition: transform .12s ease;
+    }
+    .btn:hover { transform: translateY(-2px); }
+    .btn-primary { background: linear-gradient(120deg, #4f8cff, #6aa0ff); color: #06112b; }
+    .btn-ghost { border: 1px solid var(--border); color: var(--text); }
+    footer { margin-top: 56px; font-size: 13px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 20px; }
+    a.link { color: var(--primary); text-decoration: none; }
+    a.link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <span class="badge">REAL ESTATE · AI · 54 CITIES</span>
+    <h1>RealEstateAI</h1>
+    <p class="sub">
+      房地产 AI 分析系统：二手房<strong>价格预测</strong>、城市房价<strong>趋势研判</strong>与
+      <strong>AI 房源文本分析</strong>。覆盖数据采集 → 价格预测 → 趋势预测 → 智能分析全链路，
+      支持 54 个城市（链家/贝壳二手房数据 + 国家统计局 70 城房价指数）。
+    </p>
+
+    <div class="hero-img">
+      <img src="../social_preview.png" alt="RealEstateAI 预览" />
+    </div>
+
+    <h2 class="section-title">核心能力</h2>
+    <div class="grid">
+      <div class="card">
+        <div class="ic">🏙️</div>
+        <h3>54 城数据</h3>
+        <p>链家/贝壳二手房成交 + 国家统计局 70 城房价指数，覆盖全国主要城市。</p>
+      </div>
+      <div class="card">
+        <div class="ic">🤖</div>
+        <h3>价格预测模型</h3>
+        <p>XGBoost + 随机森林融合，对房源总价/单价进行回归预测。</p>
+      </div>
+      <div class="card">
+        <div class="ic">📈</div>
+        <h3>趋势预测</h3>
+        <p>基于官方同比/环比指数，研判城市房价未来走势。</p>
+      </div>
+      <div class="card">
+        <div class="ic">💬</div>
+        <h3>AI 文本分析</h3>
+        <p>对房源描述做 NLP 解析，提炼户型、楼层、配套等结构化信息。</p>
+      </div>
+    </div>
+
+    <h2 class="section-title">技术栈</h2>
+    <div class="badges">
+      <span class="tag">Python</span>
+      <span class="tag">XGBoost</span>
+      <span class="tag">Random Forest</span>
+      <span class="tag">时间序列预测</span>
+      <span class="tag">NLP</span>
+      <span class="tag">Playwright</span>
+      <span class="tag">FastAPI</span>
+      <span class="tag">React</span>
+      <span class="tag">Vite</span>
+      <span class="tag">Dash</span>
+      <span class="tag">SQLite</span>
+    </div>
+
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/ShadowQuill/RealEstateAI">查看 GitHub 仓库</a>
+      <a class="btn btn-ghost" href="https://github.com/ShadowQuill/RealEstateAI#readme">阅读 README</a>
+    </div>
+
+    <footer>
+      本地运行：<code>python run_system.py --with-frontend</code> 一键启动
+      （API 默认 <span class="link">http://127.0.0.1:8000</span>，前端 <span class="link">http://localhost:5173</span>，看板 <span class="link">http://127.0.0.1:8050</span>）。
+      详情见仓库 README。
+    </footer>
+  </div>
+</body>
+</html>
