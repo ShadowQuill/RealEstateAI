@@ -38,7 +38,7 @@
       background: linear-gradient(120deg, #ffffff, #9fc2ff 60%, #4f8cff);
       -webkit-background-clip: text; background-clip: text; color: transparent;
     }
-    .sub { font-size: 19px; color: var(--muted); margin-top: 10px; max-width: 720px; }
+    .sub { font-size: 19px; color: var(--muted); margin-top: 10px; max-width: 760px; }
     .hero-img {
       margin: 36px 0; border-radius: 16px; overflow: hidden;
       border: 1px solid var(--border); box-shadow: 0 20px 60px rgba(0, 0, 0, .45);
@@ -66,6 +66,19 @@
     .btn:hover { transform: translateY(-2px); }
     .btn-primary { background: linear-gradient(120deg, #4f8cff, #6aa0ff); color: #06112b; }
     .btn-ghost { border: 1px solid var(--border); color: var(--text); }
+    .deploy {
+      margin-top: 28px; background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 22px 22px 24px;
+    }
+    .deploy h3 { font-size: 16px; margin-bottom: 14px; }
+    .deploy-row { display: grid; grid-template-columns: 140px 1fr; gap: 10px 16px; align-items: start; }
+    .deploy-row .k { color: var(--primary); font-weight: 600; font-size: 14px; padding-top: 2px; }
+    .deploy-row .v { font-size: 14px; color: var(--text); }
+    code {
+      background: rgba(0, 0, 0, 0.32); border: 1px solid var(--border);
+      border-radius: 6px; padding: 2px 7px; font-size: 13px; color: #cfe0ff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
     footer { margin-top: 56px; font-size: 13px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 20px; }
     a.link { color: var(--primary); text-decoration: none; }
     a.link:hover { text-decoration: underline; }
@@ -73,12 +86,12 @@
 </head>
 <body>
   <div class="wrap">
-    <span class="badge">REAL ESTATE · AI · 54 CITIES</span>
+    <span class="badge">REAL ESTATE · AI · 54 CITIES · v1.1.0</span>
     <h1>RealEstateAI</h1>
     <p class="sub">
-      房地产 AI 分析系统：二手房<strong>价格预测</strong>、城市房价<strong>趋势研判</strong>与
-      <strong>AI 房源文本分析</strong>。覆盖数据采集 → 价格预测 → 趋势预测 → 智能分析全链路，
-      支持 54 个城市（链家/贝壳二手房数据 + 国家统计局 70 城房价指数）。
+      房地产 AI 分析系统：二手房<strong>价格预测</strong>、城市房价<strong>趋势研判</strong>、
+      <strong>多城横向对比</strong>与 <strong>AI 房源文本分析</strong>。覆盖数据采集 → 价格预测 → 趋势预测 → 宏观研判 → 智能问答全链路，
+      支持 54 个城市（链家/贝壳二手房数据 + 国家统计局 70 城房价指数），并可通过 Docker 一键部署。
     </p>
 
     <div class="hero-img">
@@ -93,19 +106,39 @@
         <p>链家/贝壳二手房成交 + 国家统计局 70 城房价指数，覆盖全国主要城市。</p>
       </div>
       <div class="card">
-        <div class="ic">🤖</div>
+        <div class="ic">💰</div>
         <h3>价格预测模型</h3>
         <p>XGBoost + 随机森林融合，对房源总价/单价进行回归预测。</p>
       </div>
       <div class="card">
         <div class="ic">📈</div>
-        <h3>趋势预测</h3>
+        <h3>城市房价趋势</h3>
         <p>基于官方同比/环比指数，研判城市房价未来走势。</p>
+      </div>
+      <div class="card">
+        <div class="ic">🆚</div>
+        <h3>城市对比</h3>
+        <p>多城房价横向对比，可一键过滤样本量过少的城市，结论更可信。</p>
+      </div>
+      <div class="card">
+        <div class="ic">🌐</div>
+        <h3>宏观环境</h3>
+        <p>CPI / GDP / M2 / PMI / 利率等宏观指标，附新手说明，看得懂。</p>
       </div>
       <div class="card">
         <div class="ic">💬</div>
         <h3>AI 文本分析</h3>
         <p>对房源描述做 NLP 解析，提炼户型、楼层、配套等结构化信息。</p>
+      </div>
+      <div class="card">
+        <div class="ic">🤖</div>
+        <h3>LLM 智能问答</h3>
+        <p>可接入 OpenAI / DeepSeek，RAG 检索强制引用数据来源、抑制幻觉。</p>
+      </div>
+      <div class="card">
+        <div class="ic">🐳</div>
+        <h3>容器化部署</h3>
+        <p>提供 Docker / docker compose 一键启动，含 Railway、Render 云端部署指南。</p>
       </div>
     </div>
 
@@ -116,23 +149,42 @@
       <span class="tag">Random Forest</span>
       <span class="tag">时间序列预测</span>
       <span class="tag">NLP</span>
+      <span class="tag">RAG / TF-IDF</span>
+      <span class="tag">OpenAI / DeepSeek</span>
       <span class="tag">Playwright</span>
       <span class="tag">FastAPI</span>
       <span class="tag">React</span>
       <span class="tag">Vite</span>
+      <span class="tag">Recharts</span>
+      <span class="tag">Tailwind CSS</span>
+      <span class="tag">Radix UI</span>
+      <span class="tag">Docker</span>
       <span class="tag">Dash</span>
       <span class="tag">SQLite</span>
     </div>
 
+    <div class="deploy">
+      <h3>部署方式</h3>
+      <div class="deploy-row">
+        <div class="k">本地一键</div>
+        <div class="v"><code>python run_system.py --with-frontend</code>（API 默认 8000，前端 5173，看板 8050）</div>
+        <div class="k">Docker</div>
+        <div class="v"><code>docker compose up -d --build</code>，详见 <a class="link" href="https://github.com/ShadowQuill/RealEstateAI/blob/main/DEPLOY.md">DEPLOY.md</a></div>
+        <div class="k">云部署</div>
+        <div class="v">支持 Railway、Render（见 DEPLOY.md 指南）</div>
+      </div>
+    </div>
+
     <div class="cta">
       <a class="btn btn-primary" href="https://github.com/ShadowQuill/RealEstateAI">查看 GitHub 仓库</a>
-      <a class="btn btn-ghost" href="https://github.com/ShadowQuill/RealEstateAI#readme">阅读 README</a>
+      <a class="btn btn-ghost" href="https://github.com/ShadowQuill/RealEstateAI/releases/tag/v1.1.0">查看 v1.1.0 发布说明</a>
+      <a class="btn btn-ghost" href="https://github.com/ShadowQuill/RealEstateAI/blob/main/README.md">阅读 README</a>
     </div>
 
     <footer>
       本地运行：<code>python run_system.py --with-frontend</code> 一键启动
       （API 默认 <span class="link">http://127.0.0.1:8000</span>，前端 <span class="link">http://localhost:5173</span>，看板 <span class="link">http://127.0.0.1:8050</span>）。
-      详情见仓库 README。
+      容器化运行见 <a class="link" href="https://github.com/ShadowQuill/RealEstateAI/blob/main/DEPLOY.md">DEPLOY.md</a>。
     </footer>
   </div>
 </body>
