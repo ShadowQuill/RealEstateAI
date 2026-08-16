@@ -1,6 +1,10 @@
 export function formatPrice(price: number | null | undefined): string {
   if (price == null) return '--';
-  return price >= 10000 ? `${(price / 10000).toFixed(1)}万` : `${price.toFixed(0)}`;
+  // 房源价格字段统一以「万元」为单位存储（House.price）。
+  // 超过 1 万万（即 1 亿元）时换算为「亿」，避免位数过长；
+  // 否则直接以「万」为单位展示，并去掉多余的 .0。
+  if (price >= 10000) return `${(price / 10000).toFixed(2)}亿`;
+  return `${parseFloat(price.toFixed(1))}万`;
 }
 
 export function formatUnitPrice(price: number | null | undefined): string {

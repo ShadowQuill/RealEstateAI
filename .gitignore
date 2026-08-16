@@ -4,6 +4,10 @@ venv/
 .venv/
 env/
 ENV/
+# 环境变量（含 API 密钥，切勿提交）
+.env
+.env.local
+!.env.example
 
 # 编译缓存（不需要）
 __pycache__/

@@ -239,8 +239,8 @@ export default function NewHousePage() {
                       formatter={(value: number, name: string) => [`${value}`, name]}
                     />
                     <Legend verticalAlign="top" height={28} />
-                    <Line type="monotone" dataKey="新房" name="新建商品住宅指数" stroke="hsl(var(--primary))" dot={false} strokeWidth={2} connectNulls />
-                    <Line type="monotone" dataKey="二手房" name="二手住宅指数" stroke="#f97316" dot={false} strokeWidth={2} connectNulls />
+                    <Line type="monotone" dataKey="新房" name="新建商品住宅指数" stroke="hsl(var(--primary))" dot={false} strokeWidth={2} connectNulls isAnimationActive={false} />
+                    <Line type="monotone" dataKey="二手房" name="二手住宅指数" stroke="#f97316" dot={false} strokeWidth={2} connectNulls isAnimationActive={false} />
                   </LineChart>
                 </ChartContainer>
               )}
@@ -295,7 +295,7 @@ export default function NewHousePage() {
                     {compareCities.map((city, i) => (
                       <Line
                         key={city} type="monotone" dataKey={city} dot={false} strokeWidth={2}
-                        stroke={`hsl(${(i * 47) % 360} 70% 50%)`} connectNulls
+                        stroke={`hsl(${(i * 47) % 360} 70% 50%)`} connectNulls isAnimationActive={false}
                       />
                     ))}
                   </LineChart>

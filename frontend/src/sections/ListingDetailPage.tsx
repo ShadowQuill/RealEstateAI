@@ -251,8 +251,8 @@ export default function ListingDetailPage() {
                       return [value, name];
                     }}
                   />
-                  <Bar dataKey="price" fill="hsl(var(--primary) / 0.7)" radius={[6, 6, 0, 0]} name="price" />
-                  <Line type="monotone" dataKey="growth" stroke="hsl(var(--chart-4))" strokeWidth={2} dot={{ r: 4 }} name="growth" />
+                  <Bar dataKey="price" fill="hsl(var(--primary) / 0.7)" radius={[6, 6, 0, 0]} name="price" isAnimationActive={false} />
+                  <Line type="monotone" dataKey="growth" stroke="hsl(var(--chart-4))" strokeWidth={2} dot={{ r: 4 }} name="growth" isAnimationActive={false} />
                 </ComposedChart>
               </ChartContainer>
 

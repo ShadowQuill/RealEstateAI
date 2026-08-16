@@ -22,6 +22,14 @@ export default function NLPAnalysisPage() {
   const [loading, setLoading] = useState(false);
   const [listingInfo, setListingInfo] = useState<{ title: string; city: string; price: number | null } | null>(null);
 
+  // RAG 问答（基于真实数据）
+  const [qaQuestion, setQaQuestion] = useState("");
+  const [qaAnswer, setQaAnswer] = useState("");
+  const [qaSources, setQaSources] = useState<{ text: string; source: string; score: number }[]>([]);
+  const [qaGrounded, setQaGrounded] = useState<boolean | null>(null);
+  const [qaLlm, setQaLlm] = useState(false);
+  const [qaLoading, setQaLoading] = useState(false);
+
   useEffect(() => {
     if (listingId) {
       api.analyzeListing(Number(listingId)).then(res => {
@@ -44,6 +52,25 @@ export default function NLPAnalysisPage() {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleQa = async () => {
+    if (!qaQuestion.trim()) return;
+    setQaLoading(true);
+    try {
+      const res = await api.qaAnalyze(qaQuestion);
+      setQaAnswer(res.answer);
+      setQaSources(res.sources);
+      setQaGrounded(res.grounded);
+      setQaLlm(res.llm_enabled);
+    } catch (e) {
+      console.error(e);
+      setQaAnswer("问答请求失败，请确认后端已启动且 RAG 模块可用。");
+      setQaSources([]);
+      setQaGrounded(null);
+    } finally {
+      setQaLoading(false);
     }
   };
 
@@ -123,6 +150,66 @@ export default function NLPAnalysisPage() {
               {loading ? "分析中..." : "开始分析"}
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* RAG 问答（基于真实数据，防幻觉） */}
+      <Card className="glow-card border-0">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Sparkles className="w-4 h-4 text-primary" />
+            AI 智能问答（基于真实数据）
+          </CardTitle>
+          <CardDescription>
+            检索项目真实数据（宏观环境 / 房价指数 / 房源统计 / 文档）后作答；未配置 LLM 时返回原文摘录，绝不编造。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Textarea
+              placeholder="例如：当前宏观环境对房价有什么影响？北京和上海的房价指数谁涨得多？"
+              rows={2}
+              value={qaQuestion}
+              onChange={e => setQaQuestion(e.target.value)}
+              className="resize-none"
+              disabled={qaLoading}
+            />
+            <Button onClick={handleQa} disabled={qaLoading || !qaQuestion.trim()} className="gap-2 sm:self-end whitespace-nowrap">
+              <span className={cn("animate-spin", qaLoading ? "" : "hidden")}>⏳</span>
+              {qaLoading ? "检索中..." : "提问"}
+            </Button>
+          </div>
+
+          {qaGrounded !== null && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant={qaGrounded ? "default" : "secondary"} className="gap-1">
+                {qaGrounded ? "已基于真实数据" : "无相关数据"}
+              </Badge>
+              <Badge variant="outline" className="gap-1">
+                {qaLlm ? "LLM 生成" : "原文摘录（未启用 LLM）"}
+              </Badge>
+            </div>
+          )}
+
+          {qaAnswer && (
+            <div className="rounded-lg bg-accent/50 p-3 text-sm leading-relaxed whitespace-pre-wrap">
+              {qaAnswer}
+            </div>
+          )}
+
+          {qaSources.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">引用来源（{qaSources.length} 条真实数据片段）：</p>
+              <div className="space-y-1.5">
+                {qaSources.map((s, i) => (
+                  <div key={i} className="rounded border border-border/60 bg-background/50 p-2 text-xs">
+                    <span className="inline-block mb-1 rounded bg-primary/10 px-1.5 py-0.5 text-primary">[{i + 1}] {s.source}</span>
+                    <p className="text-muted-foreground">{s.text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

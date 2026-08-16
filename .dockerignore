@@ -1,0 +1,29 @@
+# 不纳入镜像的文件
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+
+# 前端依赖与构建产物（前端单独部署，不进后端镜像）
+frontend/node_modules/
+frontend/dist/
+
+# 数据与模型：运行期通过 docker-compose 绑定挂载提供，无需打包进镜像
+data/
+models/
+
+# 重型 NLP 缓存（容器内不安装 torch，无需携带）
+cache/
+
+# 日志
+*.log
+log/
+
+# 本地环境/密钥（如含真实 token，勿入镜像）
+.env
+
+# 系统文件
+.DS_Store

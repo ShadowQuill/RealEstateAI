@@ -13,7 +13,7 @@ RealEstateAI 是一个完整的房地产 AI 分析系统，覆盖**数据采集 
 - 预测二手房总价与单价（机器学习模型，含装修 / 朝向特征）
 - 预测城市房价未来趋势（多数据源时间序列模型：真实成交 / 官方指数折算 / 邻城指数代理）
 - 对房源描述进行 AI 文本分析：成交价提取、虚假宣传检测、区域识别、情感分析
-- 在新房价格指数、二手房房源、价格预测、榜单看板、AI 分析等页面中可视化城市房价、价格分布、性价比榜单等
+- 在新房价格指数、二手房房源、价格预测、榜单看板、AI 分析、宏观环境、**城市对比**等页面中可视化城市房价、价格分布、性价比榜单与多城横向对比等
 
 ---
 
@@ -25,7 +25,7 @@ RealEstateAI 是一个完整的房地产 AI 分析系统，覆盖**数据采集 
 模型层          models/train.py (价格) / models/trend_predictor.py (趋势)
 服务层          api/ (FastAPI 接口)
 展示层          frontend/ (React + Vite + Tailwind CSS + Recharts + Radix UI)
-AI 分析层       nlp_module/ai_analyzer.py (SentenceTransformer 语义模型)
+AI 分析层       nlp_module/ai_analyzer.py (SentenceTransformer 语义模型) + nlp_module/rag.py (基于 TF-IDF 的真实数据检索问答，防幻觉)
 ```
 
 数据流向：**爬虫 / 导入 → SQLite（data/realestate.db）→ 特征工程 → 模型训练 → API → 前端展示**。
@@ -42,7 +42,7 @@ AI 分析层       nlp_module/ai_analyzer.py (SentenceTransformer 语义模型)
    - 邻城指数代理：不在 70 城样本内的单年城市（中山、苏州、保定、廊坊、绍兴、芜湖、镇江、潍坊、泰州等共 15 城），借用邻近大城市官方同比指数折算历年价格水平；
    - 真实成交（单年）：极少数无邻城 / 官方指数可折算时的兜底，置信度最低。
 4. **AI 文本分析**：基于 `sentence-transformers`（paraphrase-multilingual-MiniLM-L12-v2）语义模型，支持成交价提取、虚假宣传检测（语义相似度 + 关键词库）、区域/特征提取、情感分析等能力。
-5. **现代前端**：React + Vite + Tailwind CSS + Recharts + Radix UI 构建的响应式界面，含 **6 个页面**——城市房源列表、房源详情、新房价格指数、价格预测、榜单看板、AI 分析。
+5. **现代前端**：React + Vite + Tailwind CSS + Recharts + Radix UI 构建的响应式界面，含 **8 个页面**——城市房源列表、房源详情、新房价格指数、价格预测、榜单看板、AI 分析、宏观环境、**城市对比**（各城市房价指数横向对比 + 可排序明细，见 `/api/index/cities_summary`）。
 
 ---
 
@@ -62,7 +62,7 @@ data/             运行时 SQLite 数据库
 run_system.py     一键启动脚本（API + 看板 + 前端）
 run_update.py     数据更新（爬取 + 训练）脚本
 run_update_real.py 保留现有真实数据重训价格/趋势模型
-.env              运行配置（端口、HF 镜像源）
+.env             运行配置（端口、HF 镜像源、可选 LLM 密钥；已被 .gitignore 忽略，模板见 .env.example）
 ```
 
 ---
@@ -79,14 +79,24 @@ pip install -r requirements.txt
 
 ### 2. 配置（可选）
 
-编辑 `.env` 调整端口与镜像源：
+编辑 `.env` 调整端口、镜像源与可选的 LLM 密钥（仓库提供 `.env.example` 模板，复制为 `.env` 后填写；**`.env` 已被 `.gitignore` 忽略，切勿提交真实密钥**）：
 
 ```
+# 服务端口
 API_HOST=127.0.0.1
 API_PORT=8000
 DASHBOARD_HOST=127.0.0.1
 DASHBOARD_PORT=8050
+
+# HuggingFace 镜像（国内加速下载 NLP 语义模型）
 HF_ENDPOINT=https://hf-mirror.com
+
+# LLM / 问答增强（可选）：配置后 /api/analyze/qa 由 LLM 生成并强制引用来源；
+# 未配置则返回检索到的真实数据原文摘录（零编造、防幻觉）。兼容 OpenAI 协议，
+# 可填写 DeepSeek / OpenAI / 自建兼容网关。
+OPENAI_API_KEY=your-api-key-here
+OPENAI_BASE_URL=https://api.deepseek.com/v1
+OPENAI_MODEL=deepseek-chat
 ```
 
 ### 3. 运行完整系统
@@ -181,7 +191,7 @@ Cookie 存于 `data/raw/lianjia_cookies.json`（已被 `.gitignore` 忽略）。
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET  | `/health` | 健康检查 / 模型加载状态 |
-| GET  | `/api/cities` | 支持的城市列表（含统计） |
+| GET  | `/api/cities` | 支持的城市列表（含统计）；可选 `min_count` 过滤样本过少的城市 |
 | GET  | `/api/cities/{city}/listings` | 城市房源列表（分页、排序、筛选） |
 | GET  | `/api/cities/{city}/stats` | 城市统计（房源数、均价、分布等） |
 | GET  | `/api/listings/{listing_id}` | 房源详情（含同小区房源） |
@@ -191,9 +201,11 @@ Cookie 存于 `data/raw/lianjia_cookies.json`（已被 `.gitignore` 忽略）。
 | GET  | `/api/index/cities` | 70 城房价指数城市列表 |
 | GET  | `/api/index/city/{city}` | 指定城市历年新房/二手房指数 |
 | GET  | `/api/index/compare` | 多城指数对比 |
+| GET  | `/api/index/cities_summary` | 各城市最新指数 + 同比/环比 + 排名（多城横向对比看板数据源） |
 | GET  | `/api/config/predict` | 价格预测可选配置（户型/装修/朝向等） |
 | POST | `/api/analyze/text` | NLP 文本分析（价格提取、虚假宣传检测等） |
 | POST | `/api/analyze/listing/{listing_id}` | 分析指定房源描述文本 |
+| POST | `/api/analyze/qa` | 基于真实数据的 AI 问答（检索 top-k 片段为上下文；配置 `OPENAI_API_KEY` 时由 LLM 生成，未配置则返回原文摘录，杜绝幻觉） |
 | GET  | `/api/dashboard/overview` | 仪表盘总览数据 |
 | GET  | `/api/dashboard/yearly_trend` | 年度价格走势 |
 
@@ -206,6 +218,7 @@ Cookie 存于 `data/raw/lianjia_cookies.json`（已被 `.gitignore` 忽略）。
 - **价格预测模型**（`models/train.py`）：以城市、面积、房龄、户型、楼层、**装修、朝向**等特征训练 XGBoost 与 RandomForest，再做加权融合（`blend_model.pkl`）。特征标准化器 `scaler.pkl` 与特征列顺序 `feature_cols.pkl` 与 API 端严格一致。
 - **趋势预测模型**（`models/trend_predictor.py`）：对每个城市按年份聚合均价，使用二次多项式回归拟合趋势，预测未来房价与年化增长率，保存为 `trend_predictor.pkl`；按城市可用数据在「真实成交 / 官方指数折算 / 邻城指数代理 / 单年兜底」四类数据源间自动路由。
 - **AI 分析模型**（`nlp_module/ai_analyzer.py`）：基于 `sentence-transformers` 加载 `paraphrase-multilingual-MiniLM-L12-v2` 模型，结合正则匹配进行成交价/单价提取、语义相似度虚假宣传检测、区域与特征提取、情感分析，生成综合分析报告。
+- **AI 问答 / 检索层**（`nlp_module/rag.py`）：用 `sklearn` 的 `TfidfVectorizer` 在真实数据（宏观快照、各城市指数概要、房源统计、文档）上构建语料并检索 top-k 片段；`/api/analyze/qa` 将检索结果作为上下文——配置 `OPENAI_API_KEY` 时交由 LLM 生成并强制引用来源，未配置时直接返回原文摘录，**零编造、防幻觉**。该模块仅依赖 sklearn/numpy，在 slim 部署镜像中同样可用。
 
 ### 各城训练样本量与准确性档位
 
@@ -251,3 +264,11 @@ Cookie 存于 `data/raw/lianjia_cookies.json`（已被 `.gitignore` 忽略）。
 - 前端 `PricePredictPage.tsx` 中的城市/户型/楼层/装修/朝向列表需与
   `utils/constants.py` 保持一致，变更需重新训练模型。
 - `data/realestate.db`（约 270MB）为可再生运行数据，已被 `.gitignore` 忽略，不纳入版本控制。
+
+## 部署（公网演示）
+
+后端 API 已支持容器化一键部署，详见 **[DEPLOY.md](./DEPLOY.md)**：
+
+- `Dockerfile` + `docker-compose.yml`：本地 `docker compose up --build` 即可起服务（含 `data/` 库与 `models/` 产物）。
+- 部署到 Railway / Render 拿公网链接，三种数据/模型处理方案（推镜像 / Git LFS / 云端训练）均在文档中说明。
+- 注意：因 `data/*.db` 与 `models/*.pkl` 被 `.gitignore` 忽略，从 GitHub 全新克隆不含它们，部署前请按文档准备。

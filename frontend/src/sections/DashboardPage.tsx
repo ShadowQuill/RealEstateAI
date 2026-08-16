@@ -119,7 +119,7 @@ export default function DashboardPage() {
                   itemStyle={{ color: 'hsl(var(--card-foreground))' }}
                   formatter={(value: number) => [`${value}万`, '均价']}
                 />
-                <Bar dataKey="price" radius={[0, 6, 6, 0]}>
+                <Bar dataKey="price" radius={[0, 6, 6, 0]} isAnimationActive={false}>
                   {barData.map((_, idx) => (
                     <Cell key={idx} fill={`hsl(var(--primary) / ${1 - idx * 0.07})`} />
                   ))}
@@ -149,7 +149,7 @@ export default function DashboardPage() {
                   itemStyle={{ color: 'hsl(var(--card-foreground))' }}
                   formatter={(value: number, name: string) => [name === '总价' ? `${value} 万` : `${value} ㎡`, name]}
                 />
-                <Scatter data={overview?.price_area_scatter?.slice(0, 2000) || []} fill="hsl(var(--primary) / 0.6)" />
+                <Scatter data={overview?.price_area_scatter?.slice(0, 2000) || []} fill="hsl(var(--primary) / 0.6)" isAnimationActive={false} />
               </ScatterChart>
             </ChartContainer>
           </CardContent>

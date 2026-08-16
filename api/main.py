@@ -130,6 +130,43 @@ class ListingFuturePredictRequest(BaseModel):
     area: float = 100.0
     future_years: int = 5
 
+class QaRequest(BaseModel):
+    question: str
+    top_k: int = 5
+
+
+def _call_llm(prompt: str) -> str:
+    """极简 OpenAI 兼容 LLM 调用（requests 懒导入，避免污染精简环境）。
+
+    通过环境变量配置：OPENAI_API_KEY（必填才启用）、OPENAI_BASE_URL（默认官方）、
+    OPENAI_MODEL（默认 gpt-4o-mini）。未配置 key 时返回空串，由调用方降级为摘录。
+    """
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return ""
+    base = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    try:
+        import requests
+        resp = requests.post(
+            f"{base}/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": "你是房地产数据分析助手，只能依据用户提供的真实数据回答，不得编造。"},
+                    {"role": "user", "content": prompt},
+                ],
+                "temperature": 0.2,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+    except Exception as e:
+        return f"（LLM 调用失败：{e}）"
+
+
 # ==================== 健康检查 ====================
 
 @app.get("/health")
@@ -148,9 +185,10 @@ def health():
 
 @app.get("/api/cities")
 def get_cities(
-    property_type: str | None = Query(None, description="房源类型：二手房 / 新房；不传则返回全部")
+    property_type: str | None = Query(None, description="房源类型：二手房 / 新房；不传则返回全部"),
+    min_count: int = Query(0, ge=0, description="最小样本数阈值，过滤样本过少的城市（默认 0 不过滤）")
 ):
-    """获取所有城市列表及统计信息（可按房源类型过滤）"""
+    """获取所有城市列表及统计信息（可按房源类型、最小样本数过滤）"""
     db = SessionLocal()
     try:
         query = db.query(
@@ -164,7 +202,7 @@ def get_cities(
             pt_col = getattr(House, 'property_type', None)
             if pt_col is not None:
                 query = query.filter(pt_col == property_type)
-        cities = query.group_by(House.city).all()
+        cities = query.group_by(House.city).having(func.count(House.id) >= min_count).all()
 
         result_cities = []
         for c in cities:
@@ -182,6 +220,7 @@ def get_cities(
             "cities": result_cities,
             "total_cities": len(result_cities),
             "property_type": property_type,
+            "min_count": min_count,
         }
     finally:
         db.close()
@@ -457,6 +496,50 @@ def compare_index(
         db.close()
 
 
+@app.get("/api/index/cities_summary")
+def cities_summary():
+    """各城市最新房价指数汇总（用于横向对比看板）。
+
+    返回每城最新一期：新房/二手房指数（同比）、新房/二手房指数（环比）、排名。
+    指数以「基期=100」：>100 表示较基期上涨、<100 表示下跌。
+    """
+    db = SessionLocal()
+    try:
+        cities = [c[0] for c in db.query(distinct(CityIndex.city)).all()]
+        result = []
+        for city in cities:
+            yoy = (
+                db.query(CityIndex)
+                .filter(CityIndex.city == city, CityIndex.base_type == "同比")
+                .order_by(CityIndex.year.desc(), CityIndex.month.desc())
+                .first()
+            )
+            if not yoy:
+                continue
+            mom = (
+                db.query(CityIndex)
+                .filter(CityIndex.city == city, CityIndex.base_type == "环比")
+                .order_by(CityIndex.year.desc(), CityIndex.month.desc())
+                .first()
+            )
+            result.append({
+                "city": city,
+                "year": yoy.year,
+                "month": yoy.month,
+                "commodity_yoy": yoy.commodity_idx,
+                "secondhand_yoy": yoy.secondhand_idx,
+                "commodity_mom": mom.commodity_idx if mom else None,
+                "secondhand_mom": mom.secondhand_idx if mom else None,
+            })
+        # 按新房同比指数降序排名（指数越高代表上涨越多）
+        result.sort(key=lambda x: (x["commodity_yoy"] or 0), reverse=True)
+        for i, r in enumerate(result, 1):
+            r["rank"] = i
+        return {"count": len(result), "cities": result}
+    finally:
+        db.close()
+
+
 # ==================== 价格预测 API ====================
 
 @app.post("/api/predict/price")
@@ -573,6 +656,28 @@ def analyze_listing(listing_id: int):
         }
     finally:
         db.close()
+
+
+@app.post("/api/analyze/qa")
+def analyze_qa(req: QaRequest):
+    """基于真实数据的 AI 问答（RAG 记忆层，防幻觉）。
+
+    先检索 top-k 真实片段作为上下文；若配置了 OPENAI_API_KEY 则交由 LLM 生成
+    （并强制引用来源），否则直接返回检索原文摘录（grounded=True，绝不编造）。
+    """
+    try:
+        from nlp_module.rag import answer as rag_answer
+        llm_fn = _call_llm if os.getenv("OPENAI_API_KEY") else None
+        res = rag_answer(req.question, llm_fn=llm_fn, k=max(1, min(req.top_k, 10)))
+        return {
+            "question": req.question,
+            "answer": res["answer"],
+            "sources": res["sources"],
+            "grounded": res["grounded"],
+            "llm_enabled": llm_fn is not None,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"问答失败: {e}")
 
 
 # ==================== 统计/仪表盘 API ====================
@@ -725,6 +830,13 @@ def get_predict_config():
         "orientations": SUPPORTED_ORIENTATIONS,
         "source": "utils/constants.py",
     }
+
+
+@app.get("/api/macro")
+def get_macro():
+    """当前宏观环境快照（展示面板 / AI 分析上下文用）。"""
+    from data_pipeline.macro_features import get_current_macro
+    return get_current_macro()
 
 
 if __name__ == "__main__":

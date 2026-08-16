@@ -199,6 +199,60 @@ export interface IndexCompareResult {
   series: { [city: string]: IndexComparePoint[] };
 }
 
+// ==================== 多城横向对比汇总 ====================
+
+export interface CityIndexSummary {
+  city: string;
+  year: number | null;
+  month: number | null;
+  /** 新房（商品住宅）指数 · 同比 */
+  commodity_yoy: number | null;
+  /** 二手房指数 · 同比 */
+  secondhand_yoy: number | null;
+  /** 新房（商品住宅）指数 · 环比 */
+  commodity_mom: number | null;
+  /** 二手房指数 · 环比 */
+  secondhand_mom: number | null;
+  rank: number;
+}
+
+export interface CityIndexSummaryResult {
+  count: number;
+  cities: CityIndexSummary[];
+}
+
+// ==================== RAG 问答（基于真实数据） ====================
+
+export interface QaSource {
+  text: string;
+  source: string;
+  score: number;
+}
+
+export interface QaResult {
+  question: string;
+  answer: string;
+  sources: QaSource[];
+  grounded: boolean;
+  llm_enabled: boolean;
+}
+
+// ==================== 当前宏观环境 ====================
+
+export interface MacroMetric {
+  key: string;
+  label: string;
+  value: number | null;
+  unit: string;
+  fmt: string;
+}
+
+export interface MacroData {
+  year: number | null;
+  metrics: MacroMetric[];
+  summary: string[];
+}
+
 // ==================== API 配置 ====================
 
 const API_BASE = 'http://localhost:8000';
@@ -293,4 +347,17 @@ export const api = {
     fetchAPI<IndexCompareResult>(
       `/api/index/compare?cities=${encodeURIComponent(cities.join(','))}&base_type=${base_type}&metric=${metric}`
     ),
+
+  // 多城横向对比汇总
+  getCitiesSummary: () => fetchAPI<CityIndexSummaryResult>('/api/index/cities_summary'),
+
+  // 当前宏观环境
+  getMacro: () => fetchAPI<MacroData>('/api/macro'),
+
+  // RAG 问答（基于真实数据，防幻觉）
+  qaAnalyze: (question: string, top_k = 5) =>
+    fetchAPI<QaResult>('/api/analyze/qa', {
+      method: 'POST',
+      body: JSON.stringify({ question, top_k }),
+    }),
 };

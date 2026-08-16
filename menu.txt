@@ -40,8 +40,11 @@ RealEstateAI/
 │   └── app.py                 #   看板后端：图表数据接口、图表 + 详情页数据表
 ├── frontend/                  # 前端（React + Vite + Tailwind CSS + Recharts + Radix UI）
 │   ├── src/
-│   │   └── sections/          #   6 个页面：城市房源列表 / 房源详情 / 新房价格指数 /
-│   │                        #     价格预测 / 榜单看板 / AI 分析
+│   │   └── sections/          #   8 个页面：城市房源列表 / 房源详情 / 新房价格指数 /
+│   │                        #     价格预测 / 榜单看板 / AI 分析 / 宏观环境 / 城市对比
+│   │       ├── MacroPage.tsx          #   宏观环境页（CPI/GDP/M2/PMI/利率等，含新手说明卡）
+│   │       ├── CityComparePage.tsx    #   城市对比页（多城房价指数横向对比 + 可排序明细）
+│   │       └── NLPAnalysisPage.tsx    #   AI 分析页（文本分析 + 基于真实数据的问答）
 │   ├── dist/                  #   构建产物（已被 API 静态挂载）
 │   └── package.json           #   前端依赖与脚本
 ├── data/                      # 运行时数据（SQLite 库、缓存）
@@ -53,7 +56,14 @@ RealEstateAI/
 ├── run_update.py              # 数据更新脚本：爬取 + 训练 + 趋势模型（会清空 houses 表）
 ├── run_update_real.py         # 保留现有真实数据重训价格/趋势模型（推荐）
 ├── requirements.txt           # Python 依赖清单
-├── .env                       # 运行配置（API/看板端口、HF 镜像源）
+├── requirements-api.txt       # 容器镜像依赖清单（精简，pip 使用国内镜像源）
+├── Dockerfile                 # 后端 API 镜像（仅核心 API，python:3.11-slim）
+├── docker-compose.yml         # 一键编排：API 服务 + data/ models/ 绑定挂载
+├── docker-entrypoint.sh       # 容器启动脚本（含前端启动提示、NLP 启用步骤提示）
+├── .dockerignore              # 构建上下文忽略（排除 data/、models/ 等大文件）
+├── DEPLOY.md                  # 部署文档（Docker / Railway / Render + 数据准备说明）
+├── .env.example               # 运行配置模板（端口、HF 镜像源、可选 LLM 密钥）
+├── .env                       # 运行配置（端口、HF 镜像源、可选 LLM 密钥；已被 .gitignore 忽略）
 ├── README.md                  # 项目说明文档
 └── menu.txt                   # 本文件：项目结构说明
 
@@ -89,7 +99,7 @@ models/*.pkl   ->  api/main.py  ->  dashboard + frontend 展示
 核心 API 接口（FastAPI，默认 http://127.0.0.1:8000）
 ---------------------------------------------------
 - GET  /health                             : 健康检查 / 模型加载状态
-- GET  /api/cities                         : 返回支持的城市列表（含统计）
+- GET  /api/cities                         : 返回支持的城市列表（含统计）；可选 min_count 过滤样本过少的城市
 - GET  /api/cities/{city}/listings         : 城市房源列表（分页、排序、筛选）
 - GET  /api/cities/{city}/stats            : 城市统计（房源数、均价、分布等）
 - GET  /api/listings/{listing_id}          : 房源详情（含同小区房源）

@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { Home, Building, LineChart, Sparkles, Menu, X, Sun, Moon, Landmark } from "lucide-react";
+import { Home, Building, LineChart, Sparkles, Menu, X, Sun, Moon, Landmark, TrendingUp, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
@@ -10,6 +10,8 @@ const navItems = [
   { to: "/newhouses", icon: Landmark, label: "新房" },
   { to: "/predict", icon: LineChart, label: "价格预测" },
   { to: "/nlp", icon: Sparkles, label: "NLP分析" },
+  { to: "/macro", icon: TrendingUp, label: "宏观环境" },
+  { to: "/cities", icon: BarChart3, label: "城市对比" },
 ];
 
 export default function Navbar() {
